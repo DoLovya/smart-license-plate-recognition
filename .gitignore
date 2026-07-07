@@ -1,0 +1,70 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+logs/
+*.log
+backend/logs/
+
+# Environment files
+.env
+.env.*
+!.env.example
+deploy/configs/.env
+
+# Build artifacts
+build/
+dist/
+out/
+cmake-build-*/
+frontend/qt_client/build/
+
+# Model weights and checkpoints
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.engine
+*.bin
+algorithms/weights/*
+!algorithms/weights/.gitkeep
+algorithms/checkpoints/*
+!algorithms/checkpoints/.gitkeep
+
+# Dataset and generated data
+data/raw/*
+!data/raw/.gitkeep
+data/interim/*
+!data/interim/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/exports/*
+!data/exports/.gitkeep
+data/sqlite/*.db
+data/sqlite/*.sqlite3
+data/sqlite/*.wal
+data/sqlite/*.shm
+
+# Coverage
+.coverage
+htmlcov/
+
+# Node / frontend cache
+node_modules/

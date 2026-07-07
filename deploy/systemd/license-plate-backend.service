@@ -1,0 +1,13 @@
+[Unit]
+Description=Smart License Plate Recognition Backend
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/smart-license-plate-recognition/backend
+ExecStart=/opt/smart-license-plate-recognition/backend/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+EnvironmentFile=/opt/smart-license-plate-recognition/deploy/configs/.env
+
+[Install]
+WantedBy=multi-user.target

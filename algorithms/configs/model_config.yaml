@@ -1,0 +1,19 @@
+project:
+  name: smart-license-plate-recognition
+  version: 0.1.0
+
+detector:
+  backend: onnxruntime
+  weight_path: algorithms/weights/plate_detector.onnx
+  confidence_threshold: 0.3
+  nms_threshold: 0.5
+
+recognizer:
+  backend: onnxruntime
+  weight_path: algorithms/weights/plate_recognizer.onnx
+  input_width: 168
+  input_height: 48
+
+runtime:
+  device: cpu
+  batch_size: 1

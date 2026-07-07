@@ -1,0 +1,13 @@
+services:
+  backend:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.backend
+    container_name: smart-license-plate-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ../configs/.env.example
+    volumes:
+      - ../../algorithms:/app/algorithms
+      - ../../data:/app/data
