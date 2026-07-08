@@ -1,0 +1,122 @@
+QWidget#MainWindow {
+    background: #07111c;
+    color: #dcefff;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+}
+
+QFrame#headerFrame,
+QFrame#videoCardFrame,
+QFrame#controlPanelFrame,
+QFrame#resultPanelFrame,
+QFrame#latestResultFrame,
+QFrame#videoSurfaceContainer {
+    background: #0d1726;
+    border: 1px solid #18314f;
+    border-radius: 18px;
+}
+
+QFrame#resultPanelFrame,
+QFrame#latestResultFrame {
+    border: 1px solid #2b8cff;
+}
+
+QLabel#titleLabel {
+    font-size: 30px;
+    font-weight: 700;
+    color: #f3fbff;
+}
+
+QLabel#subtitleLabel,
+QLabel#videoSectionHintLabel,
+QLabel#resultSectionHintLabel {
+    font-size: 14px;
+    color: #7fa1c8;
+}
+
+QLabel#videoSectionLabel,
+QLabel#resultSectionLabel,
+QLabel#historyTitleLabel {
+    font-size: 20px;
+    font-weight: 600;
+    color: #f3fbff;
+}
+
+QLabel#statusValueLabel,
+QLabel#fpsValueLabel,
+QLabel#backendStatusValueLabel {
+    color: #69d1ff;
+    font-weight: 600;
+}
+
+QLabel#currentPlateValueLabel {
+    font-size: 26px;
+    font-weight: 700;
+    color: #7ed7ff;
+}
+
+QLabel#confidenceValueLabel,
+QLabel#timestampValueLabel,
+QLabel#sourceValueLabel {
+    font-size: 15px;
+    font-weight: 600;
+    color: #dcefff;
+}
+
+QPushButton,
+QComboBox {
+    min-height: 40px;
+    padding: 0 14px;
+    border-radius: 12px;
+    border: 1px solid #29517e;
+    background: #13243b;
+    color: #f3fbff;
+    font-size: 14px;
+}
+
+QPushButton:hover,
+QComboBox:hover {
+    background: #18314f;
+    border-color: #56b5ff;
+}
+
+QPushButton:pressed {
+    background: #225a9c;
+    border-color: #90ddff;
+}
+
+QPushButton:disabled,
+QComboBox:disabled {
+    color: #5e738f;
+    background: #0c1521;
+    border-color: #1a2940;
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 28px;
+}
+
+QComboBox QAbstractItemView {
+    background: #13243b;
+    color: #f3fbff;
+    border: 1px solid #29517e;
+    selection-background-color: #225a9c;
+}
+
+QTableWidget {
+    background: #0b1522;
+    alternate-background-color: #0f1c2c;
+    gridline-color: #18314f;
+    border: 1px solid #18314f;
+    border-radius: 14px;
+    color: #dcefff;
+}
+
+QHeaderView::section {
+    background: #13243b;
+    color: #9fd9ff;
+    padding: 10px 8px;
+    border: none;
+    border-bottom: 1px solid #29517e;
+    font-weight: 600;
+}
