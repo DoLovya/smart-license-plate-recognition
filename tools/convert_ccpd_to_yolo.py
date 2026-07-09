@@ -273,7 +273,7 @@ def write_dataset_yaml(output_dir: Path, splits: dict[str, list[Path]], class_na
 
     for split in ("train", "val", "test"):
         if splits.get(split):
-            lines.append(f"{split}: {split}")
+            lines.append(f"{split}: images/{split}")
 
     lines.append("names:")
     lines.append(f"  0: {class_name}")
@@ -315,8 +315,8 @@ def convert_dataset(
         )
 
         for split, image_paths in split_files.items():
-            image_dir = output_dir / split
-            label_dir = output_dir / f"{split}_labels"
+            image_dir = output_dir / "images" / split
+            label_dir = output_dir / "labels" / split
             ensure_dir(image_dir)
             ensure_dir(label_dir)
 
@@ -369,7 +369,7 @@ def parse_args() -> argparse.Namespace:
         "--output",
         type=Path,
         default=Path("data/processed/ccpd_green_yolo"),
-        help="Output directory. Generates flat folders like train/, train_labels/, test/, test_labels/.",
+        help="Output directory. Generates Ultralytics layout like images/train and labels/train.",
     )
     parser.add_argument("--class-id", type=int, default=0, help="YOLO class id for license plate.")
     parser.add_argument("--class-name", default="license_plate", help="YOLO class name.")

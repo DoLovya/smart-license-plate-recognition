@@ -43,6 +43,7 @@ frontend/qt_client/build/
 *.onnx
 *.engine
 *.bin
+algorithms/training/runs/
 algorithms/weights/*
 !algorithms/weights/.gitkeep
 algorithms/checkpoints/*

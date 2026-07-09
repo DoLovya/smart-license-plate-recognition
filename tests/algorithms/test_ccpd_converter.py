@@ -3,6 +3,7 @@ from pathlib import Path
 from tools.convert_ccpd_to_yolo import bbox_to_yolo
 from tools.convert_ccpd_to_yolo import detect_existing_splits
 from tools.convert_ccpd_to_yolo import parse_ccpd_filename
+from tools.convert_ccpd_to_yolo import write_dataset_yaml
 
 
 def test_parse_ccpd_filename_returns_expected_fields() -> None:
@@ -41,3 +42,17 @@ def test_detect_existing_splits_keeps_explicit_test_dir(tmp_path: Path) -> None:
 
     assert list(split_map.keys()) == ["test"]
     assert split_map["test"] == [test_dir / "sample.jpg"]
+
+
+def test_write_dataset_yaml_uses_ultralytics_layout(tmp_path: Path) -> None:
+    write_dataset_yaml(
+        output_dir=tmp_path,
+        splits={"train": [tmp_path / "a.jpg"], "val": [tmp_path / "b.jpg"], "test": []},
+        class_name="license_plate",
+    )
+
+    yaml_text = (tmp_path / "dataset.yaml").read_text(encoding="utf-8")
+
+    assert "train: images/train" in yaml_text
+    assert "val: images/val" in yaml_text
+    assert "test: images/test" not in yaml_text
