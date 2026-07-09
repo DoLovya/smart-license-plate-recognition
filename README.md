@@ -179,9 +179,9 @@ bash deploy/scripts/start_backend.sh
 
 - 私有模型仓库：`DoLovya/smart-license-plate-recognition-models`
 - 子仓库路径：`algorithms/weights/plate-models`
-- 稳定发布件目录：`detector/yolo/ccpd/train-2/releases/v1.0.0/`
-- 当前推荐模型：`detector/yolo/ccpd/train-2/releases/v1.0.0/best.pt`
-- 训练快照目录：`detector/yolo/ccpd/train-2/checkpoints/`
+- 稳定发布件目录：`detector/yolo/ccpd-green/v1.0.0/`
+- 当前推荐模型：`detector/yolo/ccpd-green/v1.0.0/best.pt`
+- 训练快照目录：`detector/yolo/ccpd-green/runs/train-2/`
 - 主仓库仅更新经过验证的子仓库提交，不直接跟随模型仓库分支漂移
 
 ## 8. 后续开发建议
