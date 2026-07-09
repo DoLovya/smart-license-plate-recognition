@@ -1,9 +1,18 @@
 from __future__ import annotations
 
+from pathlib import Path
+import sys
+
 from ultralytics import YOLO
 import cv2
 
-from algorithms.detector.detection_result import DetectionBox, DetectionResult
+try:
+    from algorithms.detector.detection_result import DetectionBox, DetectionResult
+except ModuleNotFoundError:
+    project_root = Path(__file__).resolve().parents[2]
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+    from algorithms.detector.detection_result import DetectionBox, DetectionResult
 
 
 class LicensePlateDetector:
@@ -50,14 +59,15 @@ class LicensePlateDetector:
 
 
 if __name__ == "__main__":
-    detector = LicensePlateDetector("../training/runs/detect/runs/train-2/weights/best.pt")
-    image_path = (
-        "../../data/raw/CCPD2020/ccpd_green/test/"
+    current_dir = Path(__file__).resolve().parent
+    model_path = current_dir.parent / "training" / "runs" / "detect" / "runs" / "train-2" / "weights" / "best.pt"
+    image_path = current_dir.parent.parent / "data" / "raw" / "CCPD2020" / "ccpd_green" / "test" / (
         "0014128352490421455-90_90-212&467_271&489-271&489_212&489_212&467_271&467-0_0_3_30_30_25_31_32-79-4.jpg"
     )
+    detector = LicensePlateDetector(str(model_path))
 
-    raw_results = detector.detect_raw(image_path)
-    result = detector.detect(image_path)[0]
+    raw_results = detector.detect_raw(str(image_path))
+    result = detector.detect(str(image_path))[0]
 
     print(result.to_dict())
 

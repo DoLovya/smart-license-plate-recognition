@@ -5,7 +5,7 @@ __all__ = ["LicensePlateDetector", "DetectionBox", "DetectionResult"]
 
 def __getattr__(name: str):
     if name == "LicensePlateDetector":
-        from .LicensePlateDetector import LicensePlateDetector
+        from .license_plate_detector import LicensePlateDetector
 
-        return LicensePlateDetector
+        return license_plate_detector
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
