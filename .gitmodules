@@ -1,0 +1,3 @@
+[submodule "algorithms/weights/plate-models"]
+	path = algorithms/weights/plate-models
+	url = https://github.com/DoLovya/smart-license-plate-recognition-models.git

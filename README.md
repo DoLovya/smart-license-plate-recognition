@@ -140,6 +140,14 @@ cmake -S . -B build
 cmake --build build
 ```
 
+### 5.4 初始化私有模型子仓库
+
+```bash
+git submodule update --init --recursive
+```
+
+当前检测模型私有仓库挂载在 `algorithms/weights/plate-models`，主仓库通过固定子仓库提交来锁定模型版本。
+
 ## 6. 部署流程
 
 ### 6.1 环境变量准备
@@ -167,7 +175,16 @@ bash deploy/scripts/start_backend.sh
 - 参考 `deploy/systemd/license-plate-backend.service`
 - 将工作目录、Python 虚拟环境路径和环境变量文件替换为实际部署值
 
-## 7. 后续开发建议
+## 7. 模型版本策略
+
+- 私有模型仓库：`DoLovya/smart-license-plate-recognition-models`
+- 子仓库路径：`algorithms/weights/plate-models`
+- 稳定发布件目录：`detector/yolo/ccpd/train-2/releases/v1.0.0/`
+- 当前推荐模型：`detector/yolo/ccpd/train-2/releases/v1.0.0/best.pt`
+- 训练快照目录：`detector/yolo/ccpd/train-2/checkpoints/`
+- 主仓库仅更新经过验证的子仓库提交，不直接跟随模型仓库分支漂移
+
+## 8. 后续开发建议
 
 - 在 `algorithms/weights/` 中落地公开模型权重，统一通过配置文件加载。
 - 在 `backend/app/services/` 中接入真实推理流程与批处理调度逻辑。

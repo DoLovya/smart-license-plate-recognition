@@ -46,6 +46,7 @@ frontend/qt_client/build/
 algorithms/training/runs/
 algorithms/weights/*
 !algorithms/weights/.gitkeep
+!algorithms/weights/plate-models
 algorithms/checkpoints/*
 !algorithms/checkpoints/.gitkeep
 
