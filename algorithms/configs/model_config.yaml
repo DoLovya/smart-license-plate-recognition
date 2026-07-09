@@ -9,9 +9,11 @@ detector:
   nms_threshold: 0.5
 
 recognizer:
-  backend: onnxruntime
-  weight_path: algorithms/weights/plate_recognizer.onnx
-  input_width: 168
+  backend: paddleocr
+  model_dir: algorithms/weights/plate-models/recognizer/paddleocr/pp-ocrv6-small/v1.0.0
+  cls_model_dir:
+  lang: ch
+  input_width: 320
   input_height: 48
 
 runtime:
