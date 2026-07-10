@@ -37,7 +37,7 @@ bool AlgorithmServiceClient::isMockMode() const
     return mockMode_;
 }
 
-void AlgorithmServiceClient::submitFrame(const QImage& frame, const QString& sourceHint)
+void AlgorithmServiceClient::submitFrame(const QImage& frame, const QString& imageId)
 {
     if (frame.isNull()) {
         emit serviceStateChanged(tr("忽略空帧"));
@@ -45,7 +45,7 @@ void AlgorithmServiceClient::submitFrame(const QImage& frame, const QString& sou
     }
 
     if (mockMode_ || !endpoint_.isValid()) {
-        const RecognitionRecord record = buildMockRecord(frame, sourceHint);
+        const RecognitionRecord record = buildMockRecord(frame, imageId);
         QTimer::singleShot(30, this, [this, record]() {
             emit recognitionReady(record);
         });
@@ -58,7 +58,7 @@ void AlgorithmServiceClient::submitFrame(const QImage& frame, const QString& sou
     frame.save(&buffer, "JPG", 82);
 
     QJsonObject payload;
-    payload.insert("source", sourceHint);
+    payload.insert("image_id", imageId);
     payload.insert("frame_width", frame.width());
     payload.insert("frame_height", frame.height());
     payload.insert("captured_at", QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
@@ -68,20 +68,20 @@ void AlgorithmServiceClient::submitFrame(const QImage& frame, const QString& sou
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
     QNetworkReply* reply = networkManager_.post(request, QJsonDocument(payload).toJson(QJsonDocument::Compact));
-    pendingRequests_.insert(reply, sourceHint);
+    pendingRequests_.insert(reply, imageId);
     emit serviceStateChanged(tr("算法服务处理中"));
 }
 
 void AlgorithmServiceClient::handleReply(QNetworkReply* reply)
 {
-    const QString sourceHint = pendingRequests_.take(reply);
+    const QString imageId = pendingRequests_.take(reply);
     RecognitionRecord record;
-    record.source = sourceHint;
+    record.imageId = imageId;
     record.timestamp = QDateTime::currentDateTime();
 
     if (reply->error() != QNetworkReply::NoError) {
         emit serviceStateChanged(tr("算法服务异常，已回退 Mock"));
-        record = buildMockRecord(QImage(1280, 720, QImage::Format_RGB32), sourceHint);
+        record = buildMockRecord(QImage(1280, 720, QImage::Format_RGB32), imageId);
         emit recognitionReady(record);
         reply->deleteLater();
         return;
@@ -94,7 +94,7 @@ void AlgorithmServiceClient::handleReply(QNetworkReply* reply)
     if (!record.timestamp.isValid()) {
         record.timestamp = QDateTime::currentDateTime();
     }
-    record.source = root.value("source").toString(sourceHint);
+    record.imageId = root.value("image_id").toString(root.value("source").toString(imageId));
     record.frameSize = QSize(
         root.value("frame_width").toInt(1280),
         root.value("frame_height").toInt(720));
@@ -104,7 +104,7 @@ void AlgorithmServiceClient::handleReply(QNetworkReply* reply)
     reply->deleteLater();
 }
 
-RecognitionRecord AlgorithmServiceClient::buildMockRecord(const QImage& frame, const QString& sourceHint) const
+RecognitionRecord AlgorithmServiceClient::buildMockRecord(const QImage& frame, const QString& imageId) const
 {
     static const QStringList mockPlates = {
         "沪A8723P",
@@ -117,7 +117,7 @@ RecognitionRecord AlgorithmServiceClient::buildMockRecord(const QImage& frame, c
     record.plateText = mockPlates.at(QRandomGenerator::global()->bounded(mockPlates.size()));
     record.confidence = 0.85 + (QRandomGenerator::global()->bounded(14) / 100.0);
     record.timestamp = QDateTime::currentDateTime();
-    record.source = sourceHint.isEmpty() ? tr("本地 Mock 通道") : sourceHint;
+    record.imageId = imageId;
     record.frameSize = frame.size();
     return record;
 }

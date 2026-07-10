@@ -15,7 +15,7 @@ class HealthResponse(BaseModel):
 
 
 class RecognitionResponse(BaseModel):
-    filename: str
+    image_id: str
     plate_text: str
     confidence: float
     boxes: list[DetectionBox]

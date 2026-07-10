@@ -7,6 +7,7 @@
 #include "ui_MainWindow.h"
 
 #include <QComboBox>
+#include <QDateTime>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QHeaderView>
@@ -24,14 +25,6 @@
 #elif defined(HAVE_QT_MULTIMEDIA)
 #include <QCameraInfo>
 #endif
-
-namespace
-{
-QString deviceSourceText(const CameraDevice& device)
-{
-    return device.displayName.isEmpty() ? QObject::tr("实时视频流") : device.displayName;
-}
-}
 
 MainWindow::MainWindow(QWidget* parent)
     : QWidget(parent),
@@ -85,9 +78,9 @@ QString MainWindow::latestPlateText() const
     return ui_->currentPlateValueLabel->text();
 }
 
-void MainWindow::submitFrameForRecognition(const QImage& frame, const QString& sourceHint)
+void MainWindow::submitFrameForRecognition(const QImage& frame, const QString& imageId)
 {
-    serviceClient_->submitFrame(frame, sourceHint);
+    serviceClient_->submitFrame(frame, imageId);
 }
 
 void MainWindow::setServiceEndpoint(const QUrl& endpoint)
@@ -151,7 +144,7 @@ void MainWindow::refreshResultPanel(const RecognitionRecord& record)
     ui_->currentPlateValueLabel->setText(record.plateText);
     ui_->confidenceValueLabel->setText(formatConfidence(record.confidence));
     ui_->timestampValueLabel->setText(record.timestamp.toString("yyyy-MM-dd HH:mm:ss"));
-    ui_->sourceValueLabel->setText(record.source);
+    ui_->sourceValueLabel->setText(record.imageId);
 }
 
 void MainWindow::appendHistoryRow(const RecognitionRecord& record)
@@ -160,7 +153,7 @@ void MainWindow::appendHistoryRow(const RecognitionRecord& record)
     ui_->resultTableWidget->setItem(0, 0, new QTableWidgetItem(record.plateText));
     ui_->resultTableWidget->setItem(0, 1, new QTableWidgetItem(formatConfidence(record.confidence)));
     ui_->resultTableWidget->setItem(0, 2, new QTableWidgetItem(record.timestamp.toString("HH:mm:ss")));
-    ui_->resultTableWidget->setItem(0, 3, new QTableWidgetItem(record.source));
+    ui_->resultTableWidget->setItem(0, 3, new QTableWidgetItem(record.imageId));
 }
 
 QVector<CameraDevice> MainWindow::enumerateCameras() const
@@ -213,7 +206,7 @@ void MainWindow::refreshCameraDevices()
     ui_->cameraComboBox->blockSignals(false);
 
     if (!cameraDevices_.isEmpty()) {
-        ui_->sourceValueLabel->setText(deviceSourceText(cameraDevices_.first()));
+        ui_->sourceValueLabel->setText("--");
     }
 }
 
@@ -224,7 +217,7 @@ void MainWindow::startDetection()
     applyControlState(true);
 
     const CameraDevice device = currentCameraDevice();
-    ui_->sourceValueLabel->setText(deviceSourceText(device));
+    ui_->sourceValueLabel->setText("--");
     QMetaObject::invokeMethod(
         videoWorker_,
         "startStream",
@@ -263,7 +256,10 @@ void MainWindow::importImage()
     latestFrame_ = image;
     videoDisplay_->setFrame(image);
     ui_->statusValueLabel->setText(tr("已载入图像"));
-    submitFrameForRecognition(image, QFileInfo(filePath).fileName());
+    const QString imageId = QString("import-%1-%2")
+                                .arg(QDateTime::currentDateTimeUtc().toString("yyyyMMddHHmmsszzz"))
+                                .arg(QFileInfo(filePath).fileName());
+    submitFrameForRecognition(image, imageId);
 }
 
 void MainWindow::exportResults()
@@ -298,7 +294,7 @@ void MainWindow::handleCameraSelectionChanged(int index)
         return;
     }
 
-    ui_->sourceValueLabel->setText(deviceSourceText(cameraDevices_.at(index)));
+    ui_->sourceValueLabel->setText("--");
     if (detectionRunning_) {
         QMetaObject::invokeMethod(
             videoWorker_,
@@ -308,7 +304,7 @@ void MainWindow::handleCameraSelectionChanged(int index)
     }
 }
 
-void MainWindow::handleFrameReady(const QImage& frame, double fps, const QString& sourceId)
+void MainWindow::handleFrameReady(const QImage& frame, double fps, const QString& imageId)
 {
     latestFrame_ = frame;
     videoDisplay_->setFrame(frame);
@@ -319,7 +315,7 @@ void MainWindow::handleFrameReady(const QImage& frame, double fps, const QString
     }
 
     if (!submissionThrottle_.isValid() || submissionThrottle_.elapsed() >= 200) {
-        submitFrameForRecognition(frame, sourceId);
+        submitFrameForRecognition(frame, imageId);
         submissionThrottle_.restart();
     }
 }

@@ -13,7 +13,7 @@ class RecognitionService:
         # Placeholder for invoking the real detector + recognizer pipeline.
         elapsed_ms = round((perf_counter() - started_at) * 1000, 2)
         return RecognitionResponse(
-            filename=file.filename or "unknown",
+            image_id=file.filename or "unknown",
             plate_text="PENDING",
             confidence=0.0,
             boxes=[DetectionBox()],

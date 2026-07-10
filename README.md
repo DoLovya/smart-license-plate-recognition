@@ -1,194 +1,79 @@
 # 智能车牌检测识别系统
 
-智能车牌检测识别系统是一个面向后续工程化开发的多模块基础仓库，覆盖桌面端展示、Python 后端服务、深度学习算法、数据管理、部署配置和项目文档六大板块，适合作为后续迭代单图识别、批量处理、模型部署与性能优化的统一工程入口。
+桌面端 + 后端 + 算法三层架构的车牌检测与字符识别系统。Qt Widgets 客户端负责图像与结果展示，FastAPI 后端负责服务编排，Python 算法层封装 YOLOv8 检测器与 PaddleOCR 识别器。
 
-## 1. 项目目标
+## 1. 功能特性
 
-- 支持车牌检测、字符识别、结果可视化、批量处理与结果导出。
-- 保持前端展示、后端编排、算法推理、数据管理和部署发布解耦。
-- 采用适合团队协作的目录规范，便于后续扩展接口、模型与部署方式。
+- 单张图片导入与结果展示（车牌文本、置信度、图像 ID、抓拍时间）。
+- 摄像头/视频流采集、缩略图绘制与结果回写。
+- 检测 + 识别结果 CSV 导出。
+- 一键脚本串联后端启动与 Qt 客户端构建运行。
+- 算法层支持替换检测与识别模型，配置集中在 `algorithms/configs/model_config.yaml`。
 
-## 2. 项目结构
+## 2. 技术栈
+
+- 客户端：Qt 5.15 / Qt 6（Widgets、Network、Multimedia 可选），CMake 3.16+，C++17。
+- 后端：FastAPI、Uvicorn、Pydantic v2、pydantic-settings。
+- 算法：Ultralytics YOLOv8、PaddleOCR、OpenCV、ONNX Runtime、PyTorch。
+- 部署：Docker Compose、systemd、bash 脚本。
+
+## 3. 仓库结构
 
 ```text
 smart-license-plate-recognition/
-├── frontend/                    # 前端展示模块
-│   └── qt_client/               # Qt 桌面端骨架
-├── backend/                     # 后端服务模块
-│   ├── app/
-│   │   ├── api/                 # API 路由
-│   │   ├── core/                # 配置与基础设施
-│   │   ├── schemas/             # 请求/响应模型
-│   │   ├── services/            # 业务服务
-│   │   └── utils/               # 通用工具
-│   └── requirements.txt
-├── algorithms/                  # 算法模型模块
-│   ├── configs/                 # 模型与推理配置
-│   ├── detector/                # 车牌检测模块
-│   ├── recognizer/              # 字符识别模块
-│   ├── pipelines/               # 检测识别流水线
-│   ├── inference/               # 推理入口
-│   ├── training/                # 训练入口
-│   ├── weights/                 # 模型权重目录
-│   └── checkpoints/             # 训练检查点目录
-├── data/                        # 数据存储模块
-│   ├── raw/                     # 原始数据
-│   ├── interim/                 # 临时处理中间产物
-│   ├── processed/               # 处理后数据
-│   ├── exports/                 # 导出结果
-│   └── sqlite/                  # SQLite 初始化脚本与数据库文件
-├── deploy/                      # 部署配置模块
-│   ├── docker/                  # Docker 与 Compose 配置
-│   ├── scripts/                 # 启停与任务脚本
-│   ├── configs/                 # 环境变量模板
-│   └── systemd/                 # 服务部署示例
-├── docs/                        # 文档模块
-│   ├── architecture/            # 架构设计文档
-│   ├── development/             # 开发规范文档
-│   ├── deployment/              # 部署说明文档
-│   └── api/                     # 接口说明文档
-├── tests/                       # 测试代码
-│   ├── backend/
-│   ├── algorithms/
-│   └── integration/
-├── tools/                       # 辅助脚本
-├── .gitignore
-└── 智能车牌检测识别系统-项目规划.md
+├── frontend/qt_client/         # Qt 桌面端
+├── backend/                    # FastAPI 后端
+├── algorithms/                 # 检测、识别、训练、推理
+├── data/                       # 原始与处理后数据
+├── deploy/                     # Docker / 脚本 / systemd
+├── docs/                       # 架构、开发、部署、API、变更、报告
+├── tests/                      # 后端、算法、集成测试
+└── tools/                      # 数据准备等辅助脚本
 ```
 
-## 3. 模块说明
+各模块独立职责见 [docs/architecture.md](docs/architecture.md)。
 
-### `frontend`
+## 4. 环境要求
 
-- 承载桌面端展示逻辑，当前提供 `Qt Widgets` 项目骨架。
-- 后续可扩展图片加载、识别结果面板、参数配置、批量任务进度与日志面板。
+- Python 3.10+
+- Qt 5.15 或 Qt 6.5+；CMake 3.16+
+- Docker 24+（可选，用于容器化部署）
+- NVIDIA 驱动 + CUDA（可选，用于 GPU 训练与推理）
 
-### `backend`
-
-- 提供统一服务入口，负责文件接收、任务编排、结果组织与状态查询。
-- 当前采用 `FastAPI` 作为基础服务框架，便于后续接入桌面端、本地脚本或 HTTP 调试。
-
-### `algorithms`
-
-- 管理检测模型、识别模型、推理流水线、训练入口与配置文件。
-- 当前骨架包含检测器、识别器、流水线和 CLI 推理入口，便于后续接入 ONNX Runtime、PyTorch 或 TensorRT。
-
-### `data`
-
-- 管理原始数据、处理中间产物、导出结果和 SQLite 初始化脚本。
-- 约定数据与代码分层，避免算法临时产物污染源码目录。
-
-### `deploy`
-
-- 保存 Docker、脚本、环境变量模板与服务化部署样例。
-- 当前可用于本地容器调试、服务启动和后续 Linux 服务化部署。
-
-### `docs`
-
-- 保存架构、开发、部署和 API 文档，确保代码结构与文档说明同步维护。
-
-## 4. 环境依赖
-
-### 基础依赖
-
-- Python `3.10+`
-- pip `23+`
-- CMake `3.20+`
-- Qt `6.5+`
-- OpenCV `4.8+`
-
-### Python 依赖
-
-- 后端服务：`FastAPI`、`Uvicorn`、`Pydantic`、`python-multipart`
-- 算法模块：`PyTorch`、`ONNX Runtime`、`NumPy`、`OpenCV`
-- 测试工具：`pytest`
-
-### 可选依赖
-
-- Docker `24+`
-- Docker Compose Plugin
-
-## 5. 本地启动
-
-### 5.1 启动后端服务
+## 5. 快速开始
 
 ```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-服务启动后可访问 `http://127.0.0.1:8000/docs` 查看接口文档。
-
-### 5.2 运行算法推理骨架
-
-```bash
-cd algorithms
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python inference/run_inference.py --image ../data/raw/demo.jpg
-```
-
-### 5.3 编译 Qt 客户端骨架
-
-```bash
-cd frontend/qt_client
-cmake -S . -B build
-cmake --build build
-```
-
-### 5.4 初始化私有模型子仓库
-
-```bash
+# 1. 克隆并初始化子仓库（私有模型）
 git submodule update --init --recursive
+
+# 2. 一键启动后端 + Qt 客户端
+bash deploy/scripts/start_all.sh
 ```
 
-当前检测模型私有仓库挂载在 `algorithms/weights/plate-models`，主仓库通过固定子仓库提交来锁定模型版本。
+如需手动分步执行，可参考 [docs/development.md](docs/development.md) 与 [docs/deployment.md](docs/deployment.md)。
 
-## 6. 部署流程
+## 6. 模型版本
 
-### 6.1 环境变量准备
+- 模型子仓库：`algorithms/weights/plate-models`（远端 `DoLovya/smart-license-plate-recognition-models`，私有）。
+- 当前检测发布件：`detector/yolo/ccpd-green/v1.0.0/best.pt`。
+- 当前识别发布件：`recognizer/paddleocr/pp-ocrv6-small/v1.0.0/`。
+- 详细策略见 `algorithms/weights/plate-models/VERSIONING.md`。
 
-```bash
-cp deploy/configs/.env.example deploy/configs/.env
-```
+## 7. 文档索引
 
-根据实际模型路径、端口和数据目录调整配置。
+| 主题 | 路径 |
+| --- | --- |
+| 架构 | [docs/architecture.md](docs/architecture.md) |
+| 开发环境 | [docs/development.md](docs/development.md) |
+| 部署 | [docs/deployment.md](docs/deployment.md) |
+| API | [docs/api-overview.md](docs/api-overview.md) |
+| 参考文献 | [docs/references.md](docs/references.md) |
+| 内容校验 | [docs/CHECKLIST.md](docs/CHECKLIST.md) |
+| 文档变更 | [docs/CHANGELOG.md](docs/CHANGELOG.md) |
+| 文档重构报告 | [docs/DOC_REFACTOR_REPORT.md](docs/DOC_REFACTOR_REPORT.md) |
 
-### 6.2 Docker 部署后端
+## 8. 版本与更新
 
-```bash
-docker compose -f deploy/docker/docker-compose.yml up --build -d
-```
-
-### 6.3 脚本方式启动
-
-```bash
-bash deploy/scripts/start_backend.sh
-```
-
-### 6.4 服务化部署
-
-- 参考 `deploy/systemd/license-plate-backend.service`
-- 将工作目录、Python 虚拟环境路径和环境变量文件替换为实际部署值
-
-## 7. 模型版本策略
-
-- 私有模型仓库：`DoLovya/smart-license-plate-recognition-models`
-- 子仓库路径：`algorithms/weights/plate-models`
-- 稳定发布件目录：`detector/yolo/ccpd-green/v1.0.0/`
-- 当前推荐模型：`detector/yolo/ccpd-green/v1.0.0/best.pt`
-- 训练元数据目录：`detector/yolo/ccpd-green/v1.0.0/metadata/`
-- 精选报告目录：`detector/yolo/ccpd-green/v1.0.0/reports/`
-- 训练快照目录：`detector/yolo/ccpd-green/runs/train-2/`
-- 主仓库仅更新经过验证的子仓库提交，不直接跟随模型仓库分支漂移
-
-## 8. 后续开发建议
-
-- 在 `algorithms/weights/` 中落地公开模型权重，统一通过配置文件加载。
-- 在 `backend/app/services/` 中接入真实推理流程与批处理调度逻辑。
-- 在 `frontend/qt_client/` 中实现图像画布、结果表格与日志面板。
-- 在 `tests/` 中逐步补齐 API、流水线和集成测试。
+- 项目版本：0.1.0
+- 文档主入口：本文档
+- 文档最近一次重构：见 [docs/CHANGELOG.md](docs/CHANGELOG.md)

@@ -85,5 +85,9 @@ void VideoStreamWorker::produceFrame()
     ++frameCounter_;
     const double fps =
         fpsTimer_.elapsed() > 0 ? (frameCounter_ * 1000.0 / static_cast<double>(fpsTimer_.elapsed())) : 0.0;
-    emit frameReady(frame, fps, activeDevice_.deviceId);
+    const QString imageId = QString("%1-%2-%3")
+                                .arg(activeDevice_.deviceId.isEmpty() ? QStringLiteral("frame") : activeDevice_.deviceId)
+                                .arg(QDateTime::currentDateTimeUtc().toString("yyyyMMddHHmmsszzz"))
+                                .arg(frameCounter_);
+    emit frameReady(frame, fps, imageId);
 }

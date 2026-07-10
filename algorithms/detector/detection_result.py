@@ -28,7 +28,7 @@ class DetectionBox:
 
 @dataclass(slots=True)
 class DetectionResult:
-    source: str | None = None
+    image_id: str | None = None
     boxes: list[DetectionBox] = field(default_factory=list)
 
     @property
@@ -47,7 +47,7 @@ class DetectionResult:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "source": self.source,
+            "image_id": self.image_id,
             "count": self.count,
             "max_confidence": self.max_confidence,
             "confidences": self.confidences,

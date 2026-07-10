@@ -99,6 +99,7 @@ void MainWindowTest::shouldExportRecognitionRecords()
     const QByteArray content = file.readAll();
     QVERIFY(content.contains("沪A12345"));
     QVERIFY(content.contains("confidence"));
+    QVERIFY(content.contains("image_id"));
 }
 
 QTEST_MAIN(MainWindowTest)

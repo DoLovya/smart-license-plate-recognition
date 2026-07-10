@@ -21,7 +21,7 @@ public slots:
     void stopStream();
 
 signals:
-    void frameReady(const QImage& frame, double fps, const QString& sourceId);
+    void frameReady(const QImage& frame, double fps, const QString& imageId);
     void streamStateChanged(bool running, const QString& message);
 
 private slots:

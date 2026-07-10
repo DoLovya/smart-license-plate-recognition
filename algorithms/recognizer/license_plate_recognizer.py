@@ -60,20 +60,20 @@ class LicensePlateRecognizer:
 
         self.ocr = PaddleOCR(**init_kwargs)
 
-    def recognize_raw(self, source: str):
-        return self.ocr.ocr(source, cls=self.use_angle_cls)
+    def recognize_raw(self, image: str):
+        return self.ocr.ocr(image, cls=self.use_angle_cls)
 
-    def recognize(self, source: str) -> list[RecognitionResult]:
-        raw_results = self.recognize_raw(source)
+    def recognize(self, image: str, image_id: str | None = None) -> list[RecognitionResult]:
+        raw_results = self.recognize_raw(image)
         if not raw_results or not raw_results[0]:
-            return [RecognitionResult(source=source)]
+            return [RecognitionResult(image_id=image_id)]
 
         license_name, confidence = raw_results[0][0][1]
         normalized_text = license_name.replace("·", "")
 
         return [
             RecognitionResult(
-                source=source,
+                image_id=image_id,
                 text=normalized_text,
                 confidence=float(confidence),
                 raw={"result": raw_results},

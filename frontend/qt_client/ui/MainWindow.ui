@@ -361,7 +361,7 @@
            <item row="3" column="0">
             <widget class="QLabel" name="sourceTitleLabel">
              <property name="text">
-              <string>数据来源</string>
+              <string>图像 ID</string>
              </property>
             </widget>
            </item>
@@ -424,7 +424,7 @@
           </column>
           <column>
            <property name="text">
-            <string>来源</string>
+            <string>图像 ID</string>
            </property>
           </column>
          </widget>

@@ -34,7 +34,7 @@ public:
     int resultCount() const;
     QString latestPlateText() const;
 
-    void submitFrameForRecognition(const QImage& frame, const QString& sourceHint = QString());
+    void submitFrameForRecognition(const QImage& frame, const QString& imageId = QString());
 
 public slots:
     void setServiceEndpoint(const QUrl& endpoint);
@@ -57,7 +57,7 @@ private slots:
     void importImage();
     void exportResults();
     void handleCameraSelectionChanged(int index);
-    void handleFrameReady(const QImage& frame, double fps, const QString& sourceId);
+    void handleFrameReady(const QImage& frame, double fps, const QString& imageId);
     void handleRecognitionReady(const RecognitionRecord& record);
     void handleServiceStateChanged(const QString& statusText);
 

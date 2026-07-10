@@ -19,17 +19,17 @@ class LicensePlateDetector:
     def __init__(self, model_path: str):
         self.model = YOLO(model=model_path, task="detect")
 
-    def detect_raw(self, source):
-        return self.model(source)
+    def detect_raw(self, image):
+        return self.model(image)
 
-    def detect(self, source: str) -> list[DetectionResult]:
-        raw_results = self.detect_raw(source)
-        return [self._build_detection_result(result, source) for result in raw_results]
+    def detect(self, image: str, image_id: str | None = None) -> list[DetectionResult]:
+        raw_results = self.detect_raw(image)
+        return [self._build_detection_result(result, image_id) for result in raw_results]
 
-    def _build_detection_result(self, raw_result, source: str | None) -> DetectionResult:
+    def _build_detection_result(self, raw_result, image_id: str | None) -> DetectionResult:
         boxes = getattr(raw_result, "boxes", None)
         if boxes is None or len(boxes) == 0:
-            return DetectionResult(source=source)
+            return DetectionResult(image_id=image_id)
 
         xyxy_list = boxes.xyxy.tolist()
         conf_list = boxes.conf.tolist() if boxes.conf is not None else [0.0] * len(xyxy_list)
@@ -55,7 +55,7 @@ class LicensePlateDetector:
                 )
             )
 
-        return DetectionResult(source=source, boxes=detection_boxes)
+        return DetectionResult(image_id=image_id, boxes=detection_boxes)
 
 
 if __name__ == "__main__":

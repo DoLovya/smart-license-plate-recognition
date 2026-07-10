@@ -6,10 +6,10 @@ from typing import Any
 
 @dataclass(slots=True)
 class RecognitionResult:
-    source: str | None = None
+    image_id: str | None = None
     text: str = ""
     confidence: float = 0.0
-    raw: dict[str, Any] = field(default_factory=dict)
+    raw: Any | None = field(default=None, repr=False)
 
     @property
     def is_empty(self) -> bool:
@@ -17,8 +17,7 @@ class RecognitionResult:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "source": self.source,
+            "image_id": self.image_id,
             "text": self.text,
             "confidence": self.confidence,
-            "raw": self.raw,
         }

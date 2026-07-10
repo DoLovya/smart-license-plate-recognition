@@ -24,7 +24,7 @@ public:
     bool isMockMode() const;
 
 public slots:
-    void submitFrame(const QImage& frame, const QString& sourceHint);
+    void submitFrame(const QImage& frame, const QString& imageId);
 
 signals:
     void recognitionReady(const RecognitionRecord& record);
@@ -34,7 +34,7 @@ private slots:
     void handleReply(QNetworkReply* reply);
 
 private:
-    RecognitionRecord buildMockRecord(const QImage& frame, const QString& sourceHint) const;
+    RecognitionRecord buildMockRecord(const QImage& frame, const QString& imageId) const;
 
     QNetworkAccessManager networkManager_;
     QHash<QNetworkReply*, QString> pendingRequests_;

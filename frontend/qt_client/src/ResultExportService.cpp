@@ -17,13 +17,13 @@ bool ResultExportService::exportCsv(
     }
 
     QTextStream stream(&file);
-    stream << "plate_text,confidence,timestamp,source,frame_width,frame_height\n";
+    stream << "plate_text,confidence,timestamp,image_id,frame_width,frame_height\n";
 
     for (const RecognitionRecord& record : records) {
         stream << record.plateText << ','
                << QString::number(record.confidence, 'f', 2) << ','
                << record.timestamp.toString("yyyy-MM-dd HH:mm:ss") << ','
-               << record.source << ','
+               << record.imageId << ','
                << record.frameSize.width() << ','
                << record.frameSize.height() << '\n';
     }

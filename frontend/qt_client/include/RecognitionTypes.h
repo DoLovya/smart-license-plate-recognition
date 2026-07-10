@@ -19,7 +19,7 @@ struct RecognitionRecord
     QString plateText;
     double confidence = 0.0;
     QDateTime timestamp;
-    QString source;
+    QString imageId;
     QSize frameSize;
 };
 
