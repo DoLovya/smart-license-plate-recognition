@@ -36,16 +36,15 @@ file=<图片文件>
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `image_id` | string | 图像 ID，未提供时使用上传文件名 |
-| `plate_text` | string | 车牌文本，占位返回 `PENDING` |
+| `plate_text` | string | 车牌文本，来自检测框裁剪后的 OCR 识别结果 |
 | `confidence` | float | 车牌置信度 |
 | `boxes` | list[DetectionBox] | 检测框列表 |
 | `elapsed_ms` | float | 处理耗时（毫秒） |
 
 `DetectionBox` 字段：`x1, y1, x2, y2, confidence`。
 
-> 当前 `recognition_service.recognize` 为占位实现，尚未接入真实检测 + 识别流水线。
-
 ## 4. 错误与状态
 
 - 后端未启动：Qt 客户端会直接报错，无法继续检测。
+- 算法依赖或权重缺失：后端返回 500，并在 `detail` 中携带失败原因。
 - 字段对齐：与 Qt 客户端的 `RecognitionRecord.imageId` 字段对应。

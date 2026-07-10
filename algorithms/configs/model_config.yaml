@@ -3,14 +3,14 @@ project:
   version: 0.1.0
 
 detector:
-  backend: onnxruntime
-  weight_path: algorithms/weights/plate_detector.onnx
+  backend: ultralytics
+  weight_path: algorithms/weights/plate-models/detector/yolo/ccpd-green/v1.0.0/best.pt
   confidence_threshold: 0.3
   nms_threshold: 0.5
 
 recognizer:
   backend: paddleocr
-  model_dir: algorithms/weights/plate-models/recognizer/paddleocr/pp-ocrv6-small/v1.0.0
+  model_name: PP-OCRv6_medium_rec
   cls_model_dir:
   lang: ch
   input_width: 320

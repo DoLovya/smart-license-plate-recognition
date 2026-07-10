@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
-@dataclass(slots=True)
+@dataclass
 class DetectionBox:
     x1: float
     y1: float
@@ -26,7 +26,7 @@ class DetectionBox:
         return asdict(self)
 
 
-@dataclass(slots=True)
+@dataclass
 class DetectionResult:
     image_id: str | None = None
     boxes: list[DetectionBox] = field(default_factory=list)

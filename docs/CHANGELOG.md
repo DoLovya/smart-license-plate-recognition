@@ -1,5 +1,23 @@
 # 文档变更记录
 
+## 0.4.4 / 2026-07-11 — 后端接入真实车牌检测识别管线
+
+### 变更
+
+- 新增 `backend/app/services/license_plate_pipeline.py`，在后端内串联 YOLO 检测器与 PaddleOCR 识别器，实现“单图检测 -> ROI 裁剪 -> OCR 识别”流程。
+- 重写 `backend/app/services/recognition_service.py`，将 `/api/v1/recognize` 从占位返回改为真实执行算法管线，并返回检测框与识别结果。
+- 更新 `algorithms/configs/model_config.yaml`：检测权重路径对齐到仓库内实际存在的 `best.pt`，识别配置切换为 `PP-OCRv6_medium_rec`。
+- 更新 `backend/requirements.txt`：补充 `pyyaml`、`ultralytics`、`paddleocr` 以支撑后端算法管线运行。
+- 新增后端测试 `tests/backend/test_recognition.py`，覆盖服务层与路由层的前后端契约。
+
+## 0.4.3 / 2026-07-11 — PaddleOCR 识别器切换到 TextRecognition 写法
+
+### 变更
+
+- 重写 `algorithms/recognizer/license_plate_recognizer.py`，由旧的 `PaddleOCR(...).ocr(...)` 风格切换为 `TextRecognition(model_name=...).predict(...)` 风格。
+- 默认识别模型调整为 `PP-OCRv6_medium_rec`，与 `algorithms/recognizer/test.py` 的调用方式保持一致。
+- 保留 `recognize(image, image_id=None)` 对外接口不变，并新增对 PaddleOCR 3.x 结果对象的兼容解析逻辑。
+
 ## 0.4.2 / 2026-07-10 — Qt 客户端切换为纯静态图片检测
 
 ### 变更

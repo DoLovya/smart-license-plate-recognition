@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
-@dataclass(slots=True)
+@dataclass
 class RecognitionResult:
     image_id: str | None = None
     text: str = ""

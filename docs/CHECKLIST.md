@@ -29,7 +29,7 @@
 
 - [ ] `docs/api-overview.md` 中路由与 `backend/app/api/routes.py` 一致。
 - [ ] `RecognitionResponse` 字段与 `backend/app/schemas/recognition.py` 一致。
-- [ ] 占位实现说明与 `backend/app/services/recognition_service.py` 一致。
+- [ ] 识别流程说明与 `backend/app/services/recognition_service.py`、`backend/app/services/license_plate_pipeline.py` 一致。
 
 ## 6. 算法
 

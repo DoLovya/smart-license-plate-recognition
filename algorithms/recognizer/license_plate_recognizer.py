@@ -4,6 +4,8 @@ from pathlib import Path
 import sys
 from typing import Any
 
+from paddleocr import TextRecognition
+
 try:
     from algorithms.recognizer.recognition_result import RecognitionResult
 except ModuleNotFoundError:
@@ -13,72 +15,116 @@ except ModuleNotFoundError:
     from algorithms.recognizer.recognition_result import RecognitionResult
 
 
-DEFAULT_LANG = "ch"
-DEFAULT_REC_MODEL_DIR = (
-    Path(__file__).resolve().parents[1]
-    / "weights"
-    / "plate-models"
-    / "recognizer"
-    / "paddleocr"
-    / "pp-ocrv6-small"
-    / "v1.0.0"
-)
+DEFAULT_MODEL_NAME = "PP-OCRv6_medium_rec"
+DEFAULT_BATCH_SIZE = 1
 
 
 class LicensePlateRecognizer:
     def __init__(
         self,
-        lang: str = DEFAULT_LANG,
-        rec_model_dir: str | Path | None = None,
-        cls_model_dir: str | Path | None = None,
+        model_name: str = DEFAULT_MODEL_NAME,
+        batch_size: int = DEFAULT_BATCH_SIZE,
         **ocr_kwargs: Any,
     ):
-        resolved_rec_model_dir = Path(rec_model_dir) if rec_model_dir is not None else DEFAULT_REC_MODEL_DIR
-        if not resolved_rec_model_dir.exists():
-            raise FileNotFoundError(f"未找到本地识别模型目录: {resolved_rec_model_dir}")
-
-        resolved_cls_model_dir = Path(cls_model_dir) if cls_model_dir is not None else None
-        if resolved_cls_model_dir is not None and not resolved_cls_model_dir.exists():
-            raise FileNotFoundError(f"未找到本地方向分类模型目录: {resolved_cls_model_dir}")
-
-        self.lang = lang
-        self.rec_model_dir = resolved_rec_model_dir
-        self.cls_model_dir = resolved_cls_model_dir
-        self.use_angle_cls = resolved_cls_model_dir is not None
-
-        init_kwargs = dict(ocr_kwargs)
-        init_kwargs.update(
-            {
-                "use_angle_cls": self.use_angle_cls,
-                "lang": lang,
-                "det": False,
-                "rec_model_dir": str(resolved_rec_model_dir),
-            }
-        )
-        if resolved_cls_model_dir is not None:
-            init_kwargs["cls_model_dir"] = str(resolved_cls_model_dir)
-
-        self.ocr = PaddleOCR(**init_kwargs)
+        self.model_name = model_name
+        self.batch_size = batch_size
+        self.ocr = TextRecognition(model_name=model_name, **ocr_kwargs)
 
     def recognize_raw(self, image: str):
-        return self.ocr.ocr(image, cls=self.use_angle_cls)
+        return self.ocr.predict(input=image, batch_size=self.batch_size)
 
     def recognize(self, image: str, image_id: str | None = None) -> list[RecognitionResult]:
         raw_results = self.recognize_raw(image)
-        if not raw_results or not raw_results[0]:
+        if not raw_results:
             return [RecognitionResult(image_id=image_id)]
 
-        license_name, confidence = raw_results[0][0][1]
-        normalized_text = license_name.replace("·", "")
+        text, confidence, raw_payload = self._parse_result(raw_results[0])
+        normalized_text = text.replace("·", "")
 
         return [
             RecognitionResult(
                 image_id=image_id,
                 text=normalized_text,
-                confidence=float(confidence),
-                raw={"result": raw_results},
+                confidence=confidence,
+                raw={"result": raw_payload},
             )
         ]
+
+    @staticmethod
+    def _parse_result(result: Any) -> tuple[str, float, Any]:
+        raw_payload = LicensePlateRecognizer._result_to_raw(result)
+
+        candidates: list[Any] = []
+        if isinstance(raw_payload, dict):
+            candidates.extend(
+                [
+                    raw_payload.get("rec_text"),
+                    raw_payload.get("text"),
+                    raw_payload.get("label_names"),
+                ]
+            )
+        candidates.append(getattr(result, "rec_text", None))
+        candidates.append(getattr(result, "text", None))
+
+        text = ""
+        for candidate in candidates:
+            if isinstance(candidate, str) and candidate:
+                text = candidate
+                break
+            if isinstance(candidate, list) and candidate:
+                first_item = candidate[0]
+                if isinstance(first_item, str):
+                    text = first_item
+                    break
+
+        score_candidates: list[Any] = []
+        if isinstance(raw_payload, dict):
+            score_candidates.extend(
+                [
+                    raw_payload.get("rec_score"),
+                    raw_payload.get("score"),
+                    raw_payload.get("scores"),
+                ]
+            )
+        score_candidates.append(getattr(result, "rec_score", None))
+        score_candidates.append(getattr(result, "score", None))
+
+        confidence = 0.0
+        for candidate in score_candidates:
+            if isinstance(candidate, (int, float)):
+                confidence = float(candidate)
+                break
+            if isinstance(candidate, list) and candidate:
+                first_item = candidate[0]
+                if isinstance(first_item, (int, float)):
+                    confidence = float(first_item)
+                    break
+
+        return text, confidence, raw_payload
+
+    @staticmethod
+    def _result_to_raw(result: Any) -> Any:
+        if hasattr(result, "json"):
+            json_method = getattr(result, "json")
+            if callable(json_method):
+                try:
+                    return json_method()
+                except TypeError:
+                    pass
+
+        if hasattr(result, "to_dict"):
+            to_dict_method = getattr(result, "to_dict")
+            if callable(to_dict_method):
+                return to_dict_method()
+
+        if isinstance(result, dict):
+            return result
+
+        if hasattr(result, "__dict__"):
+            return dict(result.__dict__)
+
+        return result
+
 
 if __name__ == "__main__":
     script_dir = Path(__file__).resolve().parent

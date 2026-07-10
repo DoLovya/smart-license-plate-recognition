@@ -24,7 +24,7 @@ Qt 客户端 ──HTTP──▶ FastAPI 后端 ──调用──▶ algorithms
 ```
 
 - Qt 客户端仅支持静态图片检测，必须通过 HTTP 调用后端接口执行识别。
-- 后端通过 `app.services.recognition_service` 调用算法层（占位实现，详见 [api-overview.md](api-overview.md)）。
+- 后端通过 `app.services.recognition_service` 串联检测器与识别器，执行“上传图片 -> 检测车牌 -> 裁剪 ROI -> OCR 识别”的单图流水线。
 - 模型以 git submodule 形式接入，固定子仓库提交。
 
 ## 关键约束
