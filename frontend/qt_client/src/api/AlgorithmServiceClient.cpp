@@ -81,6 +81,21 @@ bool AlgorithmServiceClient::submitImage(const QString& filePath, const QString&
     return true;
 }
 
+void AlgorithmServiceClient::cancelPendingRequests()
+{
+    if (pendingRequests_.isEmpty()) {
+        return;
+    }
+
+    emit serviceStateChanged(tr("正在取消检测"));
+    const QList<QNetworkReply*> replies = pendingRequests_.keys();
+    for (QNetworkReply* reply : replies) {
+        if (reply != nullptr) {
+            reply->abort();
+        }
+    }
+}
+
 void AlgorithmServiceClient::handleReply(QNetworkReply* reply)
 {
     const PendingRequestContext context = pendingRequests_.take(reply);

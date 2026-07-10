@@ -5,17 +5,18 @@
 #include "widgets/ImagePreviewWidget.h"
 #include "ui_MainWindow.h"
 
+#include <QAction>
+#include <QActionGroup>
 #include <QApplication>
-#include <QComboBox>
 #include <QDateTime>
+#include <QDir>
 #include <QFileDialog>
 #include <QFile>
 #include <QFileInfo>
-#include <QFrame>
 #include <QHeaderView>
-#include <QHBoxLayout>
 #include <QImageReader>
 #include <QLabel>
+#include <QMenuBar>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSettings>
@@ -39,11 +40,12 @@ constexpr int kMinImageWidth = 32;
 constexpr int kMinImageHeight = 32;
 constexpr int kMaxImageWidth = 8192;
 constexpr int kMaxImageHeight = 8192;
-constexpr qreal kPreviewPaneRatio = 0.72;
-constexpr int kPreviewPaneMinWidth = 760;
-constexpr int kResultPaneMinWidth = 360;
-constexpr int kResultPaneMaxWidth = 520;
+constexpr qreal kPreviewPaneRatio = 0.70;
+constexpr int kPreviewPaneMinWidth = 680;
+constexpr int kResultPaneMinWidth = 320;
+constexpr int kResultPaneMaxWidth = 460;
 constexpr char kThemeSettingsKey[] = "ui/theme";
+constexpr char kImageDirectorySettingsKey[] = "input/image_directory";
 
 struct ThemeOption
 {
@@ -85,6 +87,15 @@ int themeIndexForId(const QString& themeId)
         }
     }
     return 0;
+}
+
+QString themeIdForIndex(int index)
+{
+    if (index < 0 || index >= static_cast<int>(std::size(kThemeOptions))) {
+        return QString::fromLatin1(kThemeOptions[0].id);
+    }
+
+    return QString::fromLatin1(kThemeOptions[index].id);
 }
 }
 
@@ -136,17 +147,55 @@ bool MainWindow::loadImageFromFile(const QString& filePath, QString* errorMessag
         return false;
     }
 
-    importedImagePath_ = filePath;
-    importedImageId_ = buildImageId(filePath);
-    importedImage_ = image;
-
-    imagePreview_->setImage(importedImage_);
-    ui_->sourceValueLabel->setText(importedImageId_);
+    clearDirectorySelection();
+    inputMode_ = InputMode::SingleImage;
+    applyCurrentImage(filePath, image);
     ui_->statusValueLabel->setText(
         tr("图片已就绪: %1 (%2x%3)")
             .arg(QFileInfo(filePath).fileName())
             .arg(importedImage_.width())
             .arg(importedImage_.height()));
+    updateSourceSummary();
+    applyControlState(false);
+    return true;
+}
+
+bool MainWindow::loadImagesFromDirectory(const QString& directoryPath, QString* errorMessage)
+{
+    const QFileInfo directoryInfo(directoryPath);
+    if (!directoryInfo.exists() || !directoryInfo.isDir()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = tr("所选路径不是有效图像文件夹。");
+        }
+        return false;
+    }
+
+    const QStringList imagePaths = collectDirectoryImages(directoryInfo.absoluteFilePath());
+    if (imagePaths.isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = tr("所选文件夹中没有可检测的 PNG/JPG/JPEG/BMP 图片。");
+        }
+        return false;
+    }
+
+    clearCurrentImage();
+    configuredDirectoryPath_ = directoryInfo.absoluteFilePath();
+    configuredDirectoryImages_ = imagePaths;
+    inputMode_ = InputMode::ImageDirectory;
+    activeDirectoryIndex_ = -1;
+    directorySuccessCount_ = 0;
+    directoryFailureCount_ = 0;
+
+    if (!previewFirstDirectoryImage(errorMessage)) {
+        clearDirectorySelection();
+        inputMode_ = InputMode::None;
+        updateSourceSummary();
+        applyControlState(false);
+        return false;
+    }
+
+    ui_->statusValueLabel->setText(tr("文件夹已就绪: 共 %1 张图片").arg(configuredDirectoryImages_.size()));
+    updateSourceSummary();
     applyControlState(false);
     return true;
 }
@@ -159,27 +208,27 @@ void MainWindow::setServiceEndpoint(const QUrl& endpoint)
 void MainWindow::setupWindow()
 {
     setWindowTitle(tr("智能车牌检测识别系统"));
-    resize(1680, 960);
-    setMinimumSize(1440, 810);
+    resize(1480, 860);
+    setMinimumSize(1280, 760);
 
-    auto* themeSwitcherFrame = new QFrame(ui_->headerFrame);
-    themeSwitcherFrame->setObjectName("themeSwitcherFrame");
+    auto* menuBar = new QMenuBar(this);
+    menuBar->setObjectName("mainMenuBar");
+    auto* viewMenu = menuBar->addMenu(tr("界面"));
+    auto* themeMenu = viewMenu->addMenu(tr("切换样式"));
 
-    auto* themeSwitcherLayout = new QHBoxLayout(themeSwitcherFrame);
-    themeSwitcherLayout->setContentsMargins(14, 10, 14, 10);
-    themeSwitcherLayout->setSpacing(10);
-
-    auto* themeLabel = new QLabel(tr("界面样式"), themeSwitcherFrame);
-    themeLabel->setObjectName("themeLabel");
-    themeSwitcherLayout->addWidget(themeLabel);
-
-    themeComboBox_ = new QComboBox(themeSwitcherFrame);
-    themeComboBox_->setObjectName("themeComboBox");
+    themeActionGroup_ = new QActionGroup(this);
+    themeActionGroup_->setExclusive(true);
     for (const ThemeOption& option : kThemeOptions) {
-        themeComboBox_->addItem(tr(option.displayName), QString::fromLatin1(option.id));
+        auto* action = themeMenu->addAction(tr(option.displayName));
+        action->setCheckable(true);
+        action->setData(QString::fromLatin1(option.id));
+        themeActionGroup_->addAction(action);
     }
-    themeSwitcherLayout->addWidget(themeComboBox_);
-    ui_->headerLayout->addWidget(themeSwitcherFrame, 0, Qt::AlignRight);
+    ui_->rootLayout->setMenuBar(menuBar);
+
+    ui_->subtitleLabel->hide();
+    ui_->previewSectionHintLabel->hide();
+    ui_->resultSectionHintLabel->hide();
 
     imagePreview_ = new ImagePreviewWidget(ui_->previewSurfaceContainer);
     imagePreview_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
@@ -197,18 +246,26 @@ void MainWindow::setupWindow()
     ui_->statusValueLabel->setText(tr("待导入图片"));
     ui_->backendStatusValueLabel->setText(tr("待连接"));
     ui_->sourceValueLabel->setText("--");
+    ui_->sourceModeValueLabel->setText(tr("未配置"));
+    ui_->directoryValueLabel->setText("--");
+    ui_->batchProgressValueLabel->setText("--");
+    ui_->directoryValueLabel->setToolTip(QString());
     applyControlState(false);
+    updateSourceSummary();
     updateContentPaneWidths();
 
     const QSettings settings;
     const QString themeId =
         settings.value(QString::fromLatin1(kThemeSettingsKey), QString::fromLatin1(kThemeOptions[0].id))
             .toString();
-    {
-        const QSignalBlocker blocker(themeComboBox_);
-        themeComboBox_->setCurrentIndex(themeIndexForId(themeId));
+    if (themeActionGroup_ != nullptr) {
+        const int themeIndex = themeIndexForId(themeId);
+        if (QAction* checkedAction = themeActionGroup_->actions().value(themeIndex, nullptr); checkedAction != nullptr) {
+            const QSignalBlocker blocker(themeActionGroup_);
+            checkedAction->setChecked(true);
+        }
     }
-    applyTheme(themeComboBox_->currentData().toString(), false);
+    applyTheme(themeIdForIndex(themeIndexForId(themeId)), false);
 }
 
 void MainWindow::resizeEvent(QResizeEvent* event)
@@ -250,9 +307,11 @@ void MainWindow::updateContentPaneWidths()
 void MainWindow::connectSignals()
 {
     connect(ui_->uploadButton, &QPushButton::clicked, this, &MainWindow::importImage);
+    connect(ui_->folderButton, &QPushButton::clicked, this, &MainWindow::importImageDirectory);
     connect(ui_->startButton, &QPushButton::clicked, this, &MainWindow::startDetection);
+    connect(ui_->stopButton, &QPushButton::clicked, this, &MainWindow::stopDetection);
     connect(ui_->exportButton, &QPushButton::clicked, this, &MainWindow::exportResults);
-    connect(themeComboBox_, qOverload<int>(&QComboBox::currentIndexChanged), this, &MainWindow::handleThemeSelectionChanged);
+    connect(themeActionGroup_, &QActionGroup::triggered, this, &MainWindow::handleThemeActionTriggered);
     connect(serviceClient_, &AlgorithmServiceClient::recognitionReady, this, &MainWindow::handleRecognitionReady);
     connect(serviceClient_, &AlgorithmServiceClient::serviceStateChanged, this, &MainWindow::handleServiceStateChanged);
     connect(serviceClient_, &AlgorithmServiceClient::requestFailed, this, &MainWindow::handleDetectionFailed);
@@ -261,8 +320,13 @@ void MainWindow::connectSignals()
 void MainWindow::applyControlState(bool running)
 {
     detectionRunning_ = running;
+    const bool readyToStart =
+        (inputMode_ == InputMode::SingleImage && hasLoadedImage())
+        || (inputMode_ == InputMode::ImageDirectory && hasConfiguredDirectory());
     ui_->uploadButton->setEnabled(!running);
-    ui_->startButton->setEnabled(!running && hasLoadedImage());
+    ui_->folderButton->setEnabled(!running);
+    ui_->startButton->setEnabled(!running && readyToStart);
+    ui_->stopButton->setEnabled(running);
     ui_->exportButton->setEnabled(!running);
 }
 
@@ -283,6 +347,49 @@ void MainWindow::applyTheme(const QString& themeId, bool persist)
     }
 }
 
+void MainWindow::updateSourceSummary()
+{
+    QString sourceModeText = tr("未配置");
+    QString directoryText = QStringLiteral("--");
+    QString progressText = QStringLiteral("--");
+
+    switch (inputMode_) {
+    case InputMode::SingleImage:
+        sourceModeText = tr("单图");
+        progressText = hasLoadedImage() ? tr("1 / 1") : QStringLiteral("--");
+        break;
+    case InputMode::ImageDirectory: {
+        sourceModeText = tr("文件夹");
+        directoryText = QDir::toNativeSeparators(configuredDirectoryPath_);
+        const int totalCount = configuredDirectoryImages_.size();
+        const int processedCount = directorySuccessCount_ + directoryFailureCount_;
+        if (detectionRunning_ && activeDirectoryIndex_ >= 0 && totalCount > 0) {
+            progressText = tr("%1 / %2 (成功 %3, 失败 %4)")
+                               .arg(qMin(activeDirectoryIndex_ + 1, totalCount))
+                               .arg(totalCount)
+                               .arg(directorySuccessCount_)
+                               .arg(directoryFailureCount_);
+        } else if (processedCount > 0 && totalCount > 0) {
+            progressText = tr("完成 %1 / %2 (成功 %3, 失败 %4)")
+                               .arg(processedCount)
+                               .arg(totalCount)
+                               .arg(directorySuccessCount_)
+                               .arg(directoryFailureCount_);
+        } else if (totalCount > 0) {
+            progressText = tr("待处理 %1 张").arg(totalCount);
+        }
+        break;
+    }
+    case InputMode::None:
+        break;
+    }
+
+    ui_->sourceModeValueLabel->setText(sourceModeText);
+    ui_->directoryValueLabel->setText(directoryText);
+    ui_->directoryValueLabel->setToolTip(directoryText == QStringLiteral("--") ? QString() : directoryText);
+    ui_->batchProgressValueLabel->setText(progressText);
+}
+
 void MainWindow::refreshResultPanel(const RecognitionRecord& record)
 {
     ui_->currentPlateValueLabel->setText(record.plateText);
@@ -298,6 +405,177 @@ void MainWindow::appendHistoryRow(const RecognitionRecord& record)
     ui_->resultTableWidget->setItem(0, 1, new QTableWidgetItem(formatConfidence(record.confidence)));
     ui_->resultTableWidget->setItem(0, 2, new QTableWidgetItem(record.timestamp.toString("HH:mm:ss")));
     ui_->resultTableWidget->setItem(0, 3, new QTableWidgetItem(record.imageId));
+}
+
+void MainWindow::clearCurrentImage()
+{
+    importedImagePath_.clear();
+    importedImageId_.clear();
+    importedImage_ = QImage();
+    imagePreview_->setImage(QImage());
+    ui_->sourceValueLabel->setText("--");
+}
+
+void MainWindow::applyCurrentImage(const QString& filePath, const QImage& image)
+{
+    importedImagePath_ = filePath;
+    importedImageId_ = buildImageId(filePath);
+    importedImage_ = image;
+    imagePreview_->setImage(importedImage_);
+    ui_->sourceValueLabel->setText(importedImageId_);
+}
+
+void MainWindow::clearDirectorySelection()
+{
+    configuredDirectoryPath_.clear();
+    configuredDirectoryImages_.clear();
+    activeDirectoryIndex_ = -1;
+    directorySuccessCount_ = 0;
+    directoryFailureCount_ = 0;
+}
+
+bool MainWindow::hasConfiguredDirectory() const
+{
+    return !configuredDirectoryPath_.isEmpty() && !configuredDirectoryImages_.isEmpty();
+}
+
+QStringList MainWindow::collectDirectoryImages(const QString& directoryPath) const
+{
+    const QDir directory(directoryPath);
+    const QFileInfoList fileInfos =
+        directory.entryInfoList(QDir::Files | QDir::Readable | QDir::NoDotAndDotDot, QDir::Name | QDir::IgnoreCase);
+
+    QStringList imagePaths;
+    imagePaths.reserve(fileInfos.size());
+    for (const QFileInfo& fileInfo : fileInfos) {
+        if (kSupportedImageFormats.contains(fileInfo.suffix().toLower().toLatin1())) {
+            imagePaths.push_back(fileInfo.absoluteFilePath());
+        }
+    }
+    return imagePaths;
+}
+
+bool MainWindow::previewFirstDirectoryImage(QString* errorMessage)
+{
+    for (const QString& imagePath : configuredDirectoryImages_) {
+        QImage image;
+        if (validateImportedImage(imagePath, nullptr, &image)) {
+            applyCurrentImage(imagePath, image);
+            return true;
+        }
+    }
+
+    clearCurrentImage();
+    if (errorMessage != nullptr) {
+        *errorMessage = tr("文件夹中的图片均无法通过格式或尺寸校验。");
+    }
+    return false;
+}
+
+void MainWindow::startSingleImageDetection()
+{
+    stopRequested_ = false;
+    QString errorMessage;
+    QImage validatedImage;
+    if (!validateImportedImage(importedImagePath_, &errorMessage, &validatedImage)) {
+        clearCurrentImage();
+        inputMode_ = InputMode::None;
+        ui_->statusValueLabel->setText(tr("待导入图片"));
+        updateSourceSummary();
+        applyControlState(false);
+        QMessageBox::warning(this, tr("图片校验失败"), errorMessage);
+        return;
+    }
+
+    applyCurrentImage(importedImagePath_, validatedImage);
+
+    if (!serviceClient_->submitImage(importedImagePath_, importedImageId_)) {
+        applyControlState(false);
+        return;
+    }
+
+    ui_->statusValueLabel->setText(tr("正在上传图片并等待检测结果"));
+    updateSourceSummary();
+    applyControlState(true);
+}
+
+void MainWindow::startDirectoryDetection()
+{
+    if (!hasConfiguredDirectory()) {
+        QMessageBox::information(this, tr("未配置文件夹"), tr("请先选择包含待检测图片的文件夹。"));
+        return;
+    }
+
+    stopRequested_ = false;
+    activeDirectoryIndex_ = 0;
+    directorySuccessCount_ = 0;
+    directoryFailureCount_ = 0;
+    ui_->statusValueLabel->setText(tr("准备批量检测"));
+    updateSourceSummary();
+    applyControlState(true);
+    submitNextDirectoryImage();
+}
+
+void MainWindow::submitNextDirectoryImage()
+{
+    while (activeDirectoryIndex_ >= 0 && activeDirectoryIndex_ < configuredDirectoryImages_.size()) {
+        const QString filePath = configuredDirectoryImages_.at(activeDirectoryIndex_);
+
+        QString errorMessage;
+        QImage validatedImage;
+        if (!validateImportedImage(filePath, &errorMessage, &validatedImage)) {
+            ++directoryFailureCount_;
+            ++activeDirectoryIndex_;
+            continue;
+        }
+
+        applyCurrentImage(filePath, validatedImage);
+        ui_->statusValueLabel->setText(
+            tr("批量检测中 %1/%2: %3")
+                .arg(activeDirectoryIndex_ + 1)
+                .arg(configuredDirectoryImages_.size())
+                .arg(QFileInfo(filePath).fileName()));
+        updateSourceSummary();
+
+        if (!serviceClient_->submitImage(importedImagePath_, importedImageId_)) {
+            return;
+        }
+
+        applyControlState(true);
+        return;
+    }
+
+    finishDirectoryDetection();
+}
+
+void MainWindow::finishDirectoryDetection()
+{
+    activeDirectoryIndex_ = -1;
+    applyControlState(false);
+    if (stopRequested_) {
+        ui_->backendStatusValueLabel->setText(tr("检测已停止"));
+        ui_->statusValueLabel->setText(
+            tr("批量检测已停止: 成功 %1 张, 失败 %2 张")
+                .arg(directorySuccessCount_)
+                .arg(directoryFailureCount_));
+        stopRequested_ = false;
+    } else {
+        ui_->backendStatusValueLabel->setText(tr("批量处理完成"));
+        ui_->statusValueLabel->setText(
+            tr("批量检测完成: 成功 %1 张, 失败 %2 张")
+                .arg(directorySuccessCount_)
+                .arg(directoryFailureCount_));
+    }
+    updateSourceSummary();
+}
+
+void MainWindow::stopDetectionInternal()
+{
+    applyControlState(false);
+    ui_->backendStatusValueLabel->setText(tr("检测已停止"));
+    ui_->statusValueLabel->setText(tr("检测已停止"));
+    updateSourceSummary();
+    stopRequested_ = false;
 }
 
 bool MainWindow::validateImportedImage(const QString& filePath, QString* errorMessage, QImage* image) const
@@ -372,40 +650,35 @@ QString MainWindow::formatConfidence(double confidence)
 
 void MainWindow::startDetection()
 {
-    QString errorMessage;
-    QImage validatedImage;
-    if (!validateImportedImage(importedImagePath_, &errorMessage, &validatedImage)) {
-        importedImage_ = QImage();
-        importedImagePath_.clear();
-        importedImageId_.clear();
-        imagePreview_->setImage(QImage());
-        ui_->statusValueLabel->setText(tr("待导入图片"));
-        ui_->sourceValueLabel->setText("--");
-        applyControlState(false);
-        QMessageBox::warning(this, tr("图片校验失败"), errorMessage);
+    if (inputMode_ == InputMode::ImageDirectory) {
+        startDirectoryDetection();
+    } else {
+        startSingleImageDetection();
+    }
+}
+
+void MainWindow::stopDetection()
+{
+    if (!detectionRunning_) {
         return;
     }
 
-    importedImage_ = validatedImage;
-    imagePreview_->setImage(importedImage_);
-    importedImageId_ = buildImageId(importedImagePath_);
-    ui_->sourceValueLabel->setText(importedImageId_);
-
-    if (!serviceClient_->submitImage(importedImagePath_, importedImageId_)) {
-        applyControlState(false);
-        return;
-    }
-
-    ui_->statusValueLabel->setText(tr("正在上传图片并等待检测结果"));
-    applyControlState(true);
+    stopRequested_ = true;
+    ui_->statusValueLabel->setText(tr("正在停止检测"));
+    ui_->backendStatusValueLabel->setText(tr("正在取消检测"));
+    updateSourceSummary();
+    serviceClient_->cancelPendingRequests();
 }
 
 void MainWindow::importImage()
 {
+    const QString initialDirectory = !configuredDirectoryPath_.isEmpty()
+                                         ? configuredDirectoryPath_
+                                         : QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
     const QString filePath = QFileDialog::getOpenFileName(
         this,
         tr("选择图片"),
-        QStandardPaths::writableLocation(QStandardPaths::PicturesLocation),
+        initialDirectory,
         tr("Images (*.png *.jpg *.jpeg *.bmp)"));
 
     if (filePath.isEmpty()) {
@@ -415,7 +688,39 @@ void MainWindow::importImage()
     QString errorMessage;
     if (!loadImageFromFile(filePath, &errorMessage)) {
         QMessageBox::warning(this, tr("图像加载失败"), errorMessage);
+        return;
     }
+
+    QSettings settings;
+    settings.setValue(QString::fromLatin1(kImageDirectorySettingsKey), QFileInfo(filePath).absolutePath());
+}
+
+void MainWindow::importImageDirectory()
+{
+    QSettings settings;
+    const QString initialDirectory =
+        settings.value(
+                    QString::fromLatin1(kImageDirectorySettingsKey),
+                    QStandardPaths::writableLocation(QStandardPaths::PicturesLocation))
+            .toString();
+
+    const QString directoryPath = QFileDialog::getExistingDirectory(
+        this,
+        tr("选择图像文件夹"),
+        initialDirectory,
+        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+
+    if (directoryPath.isEmpty()) {
+        return;
+    }
+
+    QString errorMessage;
+    if (!loadImagesFromDirectory(directoryPath, &errorMessage)) {
+        QMessageBox::warning(this, tr("文件夹加载失败"), errorMessage);
+        return;
+    }
+
+    settings.setValue(QString::fromLatin1(kImageDirectorySettingsKey), directoryPath);
 }
 
 void MainWindow::exportResults()
@@ -446,10 +751,31 @@ void MainWindow::exportResults()
 
 void MainWindow::handleRecognitionReady(const RecognitionRecord& record)
 {
+    if (stopRequested_) {
+        stopDetectionInternal();
+        return;
+    }
+
     recognitionHistory_.prepend(record);
     refreshResultPanel(record);
     appendHistoryRow(record);
+
+    if (inputMode_ == InputMode::ImageDirectory && detectionRunning_) {
+        ++directorySuccessCount_;
+        ++activeDirectoryIndex_;
+        updateSourceSummary();
+
+        if (activeDirectoryIndex_ < configuredDirectoryImages_.size()) {
+            submitNextDirectoryImage();
+            return;
+        }
+
+        finishDirectoryDetection();
+        return;
+    }
+
     ui_->statusValueLabel->setText(tr("检测完成"));
+    updateSourceSummary();
     applyControlState(false);
 }
 
@@ -460,16 +786,44 @@ void MainWindow::handleServiceStateChanged(const QString& statusText)
 
 void MainWindow::handleDetectionFailed(const QString& errorMessage)
 {
+    if (stopRequested_) {
+        if (inputMode_ == InputMode::ImageDirectory) {
+            finishDirectoryDetection();
+        } else {
+            stopDetectionInternal();
+        }
+        return;
+    }
+
+    if (inputMode_ == InputMode::ImageDirectory && detectionRunning_) {
+        ++directoryFailureCount_;
+        ++activeDirectoryIndex_;
+        updateSourceSummary();
+
+        if (activeDirectoryIndex_ < configuredDirectoryImages_.size()) {
+            submitNextDirectoryImage();
+            return;
+        }
+
+        finishDirectoryDetection();
+        return;
+    }
+
     ui_->statusValueLabel->setText(tr("检测失败"));
     applyControlState(false);
     QMessageBox::warning(this, tr("后端检测失败"), errorMessage);
 }
 
-void MainWindow::handleThemeSelectionChanged(int index)
+void MainWindow::handleThemeActionTriggered()
 {
-    if (themeComboBox_ == nullptr || index < 0) {
+    if (themeActionGroup_ == nullptr) {
         return;
     }
 
-    applyTheme(themeComboBox_->itemData(index).toString());
+    QAction* checkedAction = themeActionGroup_->checkedAction();
+    if (checkedAction == nullptr) {
+        return;
+    }
+
+    applyTheme(checkedAction->data().toString());
 }

@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1680</width>
-    <height>960</height>
+    <width>1480</width>
+    <height>860</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -15,19 +15,19 @@
   </property>
   <layout class="QVBoxLayout" name="rootLayout">
    <property name="spacing">
-    <number>20</number>
+    <number>16</number>
    </property>
    <property name="leftMargin">
-    <number>24</number>
+    <number>18</number>
    </property>
    <property name="topMargin">
-    <number>24</number>
+    <number>18</number>
    </property>
    <property name="rightMargin">
-    <number>24</number>
+    <number>18</number>
    </property>
    <property name="bottomMargin">
-    <number>24</number>
+    <number>18</number>
    </property>
    <item>
     <widget class="QFrame" name="headerFrame">
@@ -70,7 +70,7 @@
    <item>
     <layout class="QHBoxLayout" name="contentLayout">
      <property name="spacing">
-      <number>20</number>
+      <number>16</number>
      </property>
      <item>
       <widget class="QFrame" name="previewCardFrame">
@@ -79,19 +79,19 @@
        </property>
        <layout class="QVBoxLayout" name="previewCardLayout">
         <property name="spacing">
-         <number>16</number>
+         <number>14</number>
         </property>
         <property name="leftMargin">
-         <number>18</number>
+         <number>16</number>
         </property>
         <property name="topMargin">
-         <number>18</number>
+         <number>16</number>
         </property>
         <property name="rightMargin">
-         <number>18</number>
+         <number>16</number>
         </property>
         <property name="bottomMargin">
-         <number>18</number>
+         <number>16</number>
         </property>
         <item>
          <widget class="QLabel" name="previewSectionLabel">
@@ -103,7 +103,7 @@
         <item>
          <widget class="QLabel" name="previewSectionHintLabel">
           <property name="text">
-           <string>仅支持导入合法静态图片，预览区按 16:9 比例展示并在点击“开始检测”后触发后端接口。</string>
+           <string>支持单张图片或图像文件夹导入，预览区按 16:9 比例展示，并在点击“开始检测”后顺序触发后端接口。</string>
           </property>
           <property name="wordWrap">
            <bool>true</bool>
@@ -114,8 +114,8 @@
          <widget class="QFrame" name="previewSurfaceContainer">
           <property name="minimumSize">
            <size>
-            <width>720</width>
-            <height>405</height>
+            <width>640</width>
+            <height>360</height>
            </size>
           </property>
           <property name="frameShape">
@@ -144,39 +144,49 @@
           </property>
           <layout class="QVBoxLayout" name="controlPanelLayout">
            <property name="spacing">
-            <number>12</number>
+            <number>10</number>
            </property>
            <property name="leftMargin">
-            <number>16</number>
+            <number>14</number>
            </property>
            <property name="topMargin">
-            <number>16</number>
+            <number>14</number>
            </property>
            <property name="rightMargin">
-            <number>16</number>
+            <number>14</number>
            </property>
            <property name="bottomMargin">
-            <number>16</number>
+            <number>14</number>
            </property>
            <item>
             <layout class="QHBoxLayout" name="primaryActionLayout">
              <property name="spacing">
-              <number>12</number>
+              <number>10</number>
              </property>
              <item>
               <widget class="QPushButton" name="uploadButton">
                <property name="minimumHeight">
-                <number>40</number>
+                <number>36</number>
                </property>
                <property name="text">
-                <string>上传图像</string>
+                <string>选择单图</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="folderButton">
+               <property name="minimumHeight">
+                <number>36</number>
+               </property>
+               <property name="text">
+                <string>配置文件夹</string>
                </property>
               </widget>
              </item>
              <item>
               <widget class="QPushButton" name="startButton">
                <property name="minimumHeight">
-                <number>40</number>
+                <number>36</number>
                </property>
                <property name="text">
                 <string>开始检测</string>
@@ -184,9 +194,19 @@
               </widget>
              </item>
              <item>
+              <widget class="QPushButton" name="stopButton">
+               <property name="minimumHeight">
+                <number>36</number>
+               </property>
+               <property name="text">
+                <string>停止检测</string>
+               </property>
+              </widget>
+             </item>
+             <item>
               <widget class="QPushButton" name="exportButton">
                <property name="minimumHeight">
-                <number>40</number>
+                <number>36</number>
                </property>
                <property name="text">
                 <string>导出结果</string>
@@ -229,6 +249,61 @@
              </item>
             </layout>
            </item>
+           <item>
+            <layout class="QGridLayout" name="inputSummaryLayout">
+             <property name="horizontalSpacing">
+              <number>12</number>
+             </property>
+             <property name="verticalSpacing">
+              <number>10</number>
+             </property>
+             <item row="0" column="0">
+              <widget class="QLabel" name="sourceModeCaptionLabel">
+               <property name="text">
+                <string>数据源</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QLabel" name="sourceModeValueLabel">
+               <property name="text">
+                <string>--</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLabel" name="directoryCaptionLabel">
+               <property name="text">
+                <string>文件夹</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QLabel" name="directoryValueLabel">
+               <property name="text">
+                <string>--</string>
+               </property>
+               <property name="wordWrap">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="0">
+              <widget class="QLabel" name="batchProgressCaptionLabel">
+               <property name="text">
+                <string>批量进度</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="QLabel" name="batchProgressValueLabel">
+               <property name="text">
+                <string>--</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
           </layout>
          </widget>
         </item>
@@ -242,19 +317,19 @@
        </property>
        <layout class="QVBoxLayout" name="resultPanelLayout">
         <property name="spacing">
-         <number>16</number>
+         <number>14</number>
         </property>
         <property name="leftMargin">
-         <number>18</number>
+         <number>16</number>
         </property>
         <property name="topMargin">
-         <number>18</number>
+         <number>16</number>
         </property>
         <property name="rightMargin">
-         <number>18</number>
+         <number>16</number>
         </property>
         <property name="bottomMargin">
-         <number>18</number>
+         <number>16</number>
         </property>
         <item>
          <widget class="QLabel" name="resultSectionLabel">

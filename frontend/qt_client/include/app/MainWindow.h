@@ -17,7 +17,7 @@ class MainWindow;
 QT_END_NAMESPACE
 
 class AlgorithmServiceClient;
-class QComboBox;
+class QActionGroup;
 class ImagePreviewWidget;
 class ResultExportService;
 
@@ -68,23 +68,25 @@ private:
     void startDirectoryDetection();
     void submitNextDirectoryImage();
     void finishDirectoryDetection();
+    void stopDetectionInternal();
     bool validateImportedImage(const QString& filePath, QString* errorMessage, QImage* image = nullptr) const;
     QString buildImageId(const QString& filePath) const;
     static QString formatConfidence(double confidence);
 
 private slots:
     void startDetection();
+    void stopDetection();
     void importImage();
     void importImageDirectory();
     void exportResults();
     void handleRecognitionReady(const RecognitionRecord& record);
     void handleServiceStateChanged(const QString& statusText);
     void handleDetectionFailed(const QString& errorMessage);
-    void handleThemeSelectionChanged(int index);
+    void handleThemeActionTriggered();
 
 private:
     Ui::MainWindow* ui_;
-    QComboBox* themeComboBox_ = nullptr;
+    QActionGroup* themeActionGroup_ = nullptr;
     ImagePreviewWidget* imagePreview_;
     AlgorithmServiceClient* serviceClient_;
     ResultExportService* exportService_;
@@ -99,4 +101,5 @@ private:
     int activeDirectoryIndex_ = -1;
     int directorySuccessCount_ = 0;
     int directoryFailureCount_ = 0;
+    bool stopRequested_ = false;
 };

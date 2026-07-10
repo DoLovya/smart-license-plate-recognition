@@ -22,6 +22,7 @@ public:
 
 public slots:
     bool submitImage(const QString& filePath, const QString& imageId);
+    void cancelPendingRequests();
 
 signals:
     void recognitionReady(const RecognitionRecord& record);

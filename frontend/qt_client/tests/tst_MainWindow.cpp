@@ -1,12 +1,15 @@
+#include <QMenuBar>
 #include <QFile>
 #include <QImage>
 #include <QLabel>
+#include <QMenu>
 #include <QPushButton>
 #include <QSharedPointer>
 #include <QTableWidget>
 #include <QTemporaryDir>
 #include <QTcpServer>
 #include <QTcpSocket>
+#include <QTimer>
 #include <QtTest>
 
 #include "app/MainWindow.h"
@@ -17,7 +20,7 @@ class TestRecognitionServer final : public QObject
     Q_OBJECT
 
 public:
-    TestRecognitionServer()
+    explicit TestRecognitionServer(int responseDelayMs = 0) : responseDelayMs_(responseDelayMs)
     {
         connect(&server_, &QTcpServer::newConnection, this, &TestRecognitionServer::handleNewConnection);
     }
@@ -35,6 +38,11 @@ public:
     bool requestReceived() const
     {
         return requestReceived_;
+    }
+
+    int requestCount() const
+    {
+        return requestCount_;
     }
 
     QString requestPath() const
@@ -95,6 +103,7 @@ private slots:
 
             rawRequest_ = *buffer;
             requestReceived_ = true;
+            ++requestCount_;
 
             const QByteArray responseBody =
                 "{\"image_id\":\"UnitTestImage\",\"plate_text\":\"沪A12345\",\"confidence\":0.98,"
@@ -105,9 +114,19 @@ private slots:
                 "Content-Length: " + QByteArray::number(responseBody.size()) + "\r\n"
                 "Connection: close\r\n\r\n" + responseBody;
 
-            socket->write(response);
-            socket->flush();
-            socket->disconnectFromHost();
+            const auto sendResponse = [socket, response]() {
+                if (socket->state() == QAbstractSocket::ConnectedState) {
+                    socket->write(response);
+                    socket->flush();
+                }
+                socket->disconnectFromHost();
+            };
+
+            if (responseDelayMs_ > 0) {
+                QTimer::singleShot(responseDelayMs_, socket, sendResponse);
+            } else {
+                sendResponse();
+            }
         });
 
         connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
@@ -116,8 +135,10 @@ private slots:
 private:
     QTcpServer server_;
     bool requestReceived_ = false;
+    int requestCount_ = 0;
     QString requestPath_;
     QByteArray rawRequest_;
+    int responseDelayMs_ = 0;
 };
 
 class MainWindowTest : public QObject
@@ -129,6 +150,8 @@ private slots:
     void shouldInitializeCoreControls();
     void shouldRejectInvalidImportedImage();
     void shouldTriggerBackendRecognitionAfterLoadingImage();
+    void shouldTriggerBackendRecognitionForConfiguredDirectory();
+    void shouldStopDetectionForConfiguredDirectory();
     void shouldExportRecognitionRecords();
 };
 
@@ -142,15 +165,27 @@ void MainWindowTest::shouldInitializeCoreControls()
     MainWindow window;
 
     auto* uploadButton = window.findChild<QPushButton*>("uploadButton");
+    auto* folderButton = window.findChild<QPushButton*>("folderButton");
     auto* startButton = window.findChild<QPushButton*>("startButton");
+    auto* stopButton = window.findChild<QPushButton*>("stopButton");
     auto* exportButton = window.findChild<QPushButton*>("exportButton");
+    auto* menuBar = window.findChild<QMenuBar*>("mainMenuBar");
 
     QVERIFY(uploadButton != nullptr);
+    QVERIFY(folderButton != nullptr);
     QVERIFY(startButton != nullptr);
+    QVERIFY(stopButton != nullptr);
     QVERIFY(exportButton != nullptr);
+    QVERIFY(menuBar != nullptr);
+    QVERIFY(window.findChild<QObject*>("themeComboBox") == nullptr);
+    QVERIFY(menuBar->actions().size() == 1);
+    QVERIFY(menuBar->actions().constFirst()->menu() != nullptr);
+    QVERIFY(menuBar->actions().constFirst()->menu()->actions().constFirst()->menu() != nullptr);
+    QVERIFY(menuBar->actions().constFirst()->menu()->actions().constFirst()->menu()->actions().size() == 3);
     QVERIFY(window.findChild<QTableWidget*>("resultTableWidget") != nullptr);
     QVERIFY(!window.hasLoadedImage());
     QVERIFY(!startButton->isEnabled());
+    QVERIFY(!stopButton->isEnabled());
 }
 
 void MainWindowTest::shouldRejectInvalidImportedImage()
@@ -207,6 +242,95 @@ void MainWindowTest::shouldTriggerBackendRecognitionAfterLoadingImage()
     auto* backendStatusLabel = window.findChild<QLabel*>("backendStatusValueLabel");
     QVERIFY(backendStatusLabel != nullptr);
     QCOMPARE(backendStatusLabel->text(), QString::fromUtf8("检测完成"));
+}
+
+void MainWindowTest::shouldTriggerBackendRecognitionForConfiguredDirectory()
+{
+    TestRecognitionServer server;
+    QVERIFY(server.start());
+
+    MainWindow window;
+    window.setServiceEndpoint(server.endpoint());
+
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+
+    QImage imageA(1280, 720, QImage::Format_RGB32);
+    imageA.fill(Qt::darkBlue);
+    QVERIFY(imageA.save(tempDir.filePath("plate_a.png"), "PNG"));
+
+    QImage imageB(960, 540, QImage::Format_RGB32);
+    imageB.fill(Qt::darkGreen);
+    QVERIFY(imageB.save(tempDir.filePath("plate_b.jpg"), "JPG"));
+
+    QFile ignoredFile(tempDir.filePath("readme.txt"));
+    QVERIFY(ignoredFile.open(QIODevice::WriteOnly | QIODevice::Text));
+    ignoredFile.write("not-an-image");
+    ignoredFile.close();
+
+    QString errorMessage;
+    QVERIFY(window.loadImagesFromDirectory(tempDir.path(), &errorMessage));
+    QVERIFY2(errorMessage.isEmpty(), qPrintable(errorMessage));
+
+    auto* startButton = window.findChild<QPushButton*>("startButton");
+    auto* statusLabel = window.findChild<QLabel*>("statusValueLabel");
+    auto* progressLabel = window.findChild<QLabel*>("batchProgressValueLabel");
+    QVERIFY(startButton != nullptr);
+    QVERIFY(statusLabel != nullptr);
+    QVERIFY(progressLabel != nullptr);
+    QVERIFY(startButton->isEnabled());
+
+    QTest::mouseClick(startButton, Qt::LeftButton);
+
+    QTRY_COMPARE(server.requestCount(), 2);
+    QTRY_COMPARE(window.resultCount(), 2);
+    QTRY_COMPARE(statusLabel->text(), QString::fromUtf8("批量检测完成: 成功 2 张, 失败 0 张"));
+    QCOMPARE(progressLabel->text(), QString::fromUtf8("完成 2 / 2 (成功 2, 失败 0)"));
+}
+
+void MainWindowTest::shouldStopDetectionForConfiguredDirectory()
+{
+    TestRecognitionServer server(1500);
+    QVERIFY(server.start());
+
+    MainWindow window;
+    window.setServiceEndpoint(server.endpoint());
+
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+
+    QImage imageA(1280, 720, QImage::Format_RGB32);
+    imageA.fill(Qt::darkBlue);
+    QVERIFY(imageA.save(tempDir.filePath("plate_a.png"), "PNG"));
+
+    QImage imageB(960, 540, QImage::Format_RGB32);
+    imageB.fill(Qt::darkGreen);
+    QVERIFY(imageB.save(tempDir.filePath("plate_b.jpg"), "JPG"));
+
+    QString errorMessage;
+    QVERIFY(window.loadImagesFromDirectory(tempDir.path(), &errorMessage));
+    QVERIFY2(errorMessage.isEmpty(), qPrintable(errorMessage));
+
+    auto* startButton = window.findChild<QPushButton*>("startButton");
+    auto* stopButton = window.findChild<QPushButton*>("stopButton");
+    auto* statusLabel = window.findChild<QLabel*>("statusValueLabel");
+    auto* backendStatusLabel = window.findChild<QLabel*>("backendStatusValueLabel");
+    QVERIFY(startButton != nullptr);
+    QVERIFY(stopButton != nullptr);
+    QVERIFY(statusLabel != nullptr);
+    QVERIFY(backendStatusLabel != nullptr);
+
+    QTest::mouseClick(startButton, Qt::LeftButton);
+    QTRY_COMPARE(server.requestCount(), 1);
+    QVERIFY(stopButton->isEnabled());
+
+    QTest::mouseClick(stopButton, Qt::LeftButton);
+
+    QTRY_COMPARE(statusLabel->text(), QString::fromUtf8("批量检测已停止: 成功 0 张, 失败 0 张"));
+    QCOMPARE(backendStatusLabel->text(), QString::fromUtf8("检测已停止"));
+    QCOMPARE(server.requestCount(), 1);
+    QCOMPARE(window.resultCount(), 0);
+    QVERIFY(!window.isDetectionRunning());
 }
 
 void MainWindowTest::shouldExportRecognitionRecords()
