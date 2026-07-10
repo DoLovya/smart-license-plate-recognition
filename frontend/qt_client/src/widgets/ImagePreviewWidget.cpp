@@ -3,6 +3,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPaintEvent>
+#include <QSizePolicy>
 
 namespace
 {
@@ -13,7 +14,8 @@ ImagePreviewWidget::ImagePreviewWidget(QWidget* parent) : QFrame(parent)
 {
     setObjectName("imagePreviewWidget");
     setFrameShape(QFrame::NoFrame);
-    setMinimumSize(960, 540);
+    setMinimumSize(720, 405);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 }
 
 void ImagePreviewWidget::setImage(const QImage& image)
@@ -54,7 +56,7 @@ void ImagePreviewWidget::paintEvent(QPaintEvent* event)
     }
 
     const QImage scaledFrame =
-        currentImage_.scaled(target.size(), Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+        currentImage_.scaled(target.size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
     const QPoint topLeft(
         target.center().x() - (scaledFrame.width() / 2),
         target.center().y() - (scaledFrame.height() / 2));

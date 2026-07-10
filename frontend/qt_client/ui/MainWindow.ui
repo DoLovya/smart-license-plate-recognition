@@ -114,8 +114,8 @@
          <widget class="QFrame" name="previewSurfaceContainer">
           <property name="minimumSize">
            <size>
-            <width>960</width>
-            <height>540</height>
+            <width>720</width>
+            <height>405</height>
            </size>
           </property>
           <property name="frameShape">
