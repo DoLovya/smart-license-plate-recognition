@@ -14,6 +14,8 @@ env/
 # IDE
 .idea/
 .vscode/
+.cache/
+.clangd/
 *.swp
 *.swo
 .DS_Store
