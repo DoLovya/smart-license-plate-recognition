@@ -1,5 +1,14 @@
 # 文档变更记录
 
+## 0.4.1 / 2026-07-10 — Qt 客户端目录分层
+
+### 变更
+
+- 重构 `frontend/qt_client/src/` 与 `include/`：按职责拆分为 `app/`、`api/`、`services/`、`widgets/`、`workers/`、`core/`，替代原有平铺结构。
+- 更新 `frontend/qt_client/CMakeLists.txt`：按模块分组维护源文件列表，测试目标复用同一套分层清单。
+- 同步修正 Qt 客户端源码与测试中的头文件引用路径，保持目录结构与依赖关系一致。
+- 验证通过：`cmake -S frontend/qt_client -B frontend/qt_client/build`、`cmake --build frontend/qt_client/build`、`ctest --test-dir frontend/qt_client/build --output-on-failure`。
+
 ## 0.4.0 / 2026-07-10 — docs 目录扁平化
 
 ### 变更

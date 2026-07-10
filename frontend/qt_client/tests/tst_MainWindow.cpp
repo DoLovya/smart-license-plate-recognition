@@ -6,8 +6,8 @@
 #include <QTemporaryDir>
 #include <QtTest>
 
-#include "../include/MainWindow.h"
-#include "../include/ResultExportService.h"
+#include "app/MainWindow.h"
+#include "services/ResultExportService.h"
 
 class MainWindowTest : public QObject
 {

@@ -1,9 +1,9 @@
-#include "../include/MainWindow.h"
+#include "app/MainWindow.h"
 
-#include "../include/AlgorithmServiceClient.h"
-#include "../include/ResultExportService.h"
-#include "../include/VideoDisplayWidget.h"
-#include "../include/VideoStreamWorker.h"
+#include "api/AlgorithmServiceClient.h"
+#include "services/ResultExportService.h"
+#include "widgets/VideoDisplayWidget.h"
+#include "workers/VideoStreamWorker.h"
 #include "ui_MainWindow.h"
 
 #include <QComboBox>

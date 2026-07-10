@@ -6,7 +6,7 @@
 #include <QObject>
 #include <QUrl>
 
-#include "RecognitionTypes.h"
+#include "core/RecognitionTypes.h"
 
 class QNetworkReply;
 

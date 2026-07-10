@@ -1,4 +1,4 @@
-#include "../include/VideoStreamWorker.h"
+#include "workers/VideoStreamWorker.h"
 
 #include <QDateTime>
 #include <QFont>

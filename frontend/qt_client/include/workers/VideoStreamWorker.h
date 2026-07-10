@@ -5,7 +5,7 @@
 #include <QObject>
 #include <QSize>
 
-#include "RecognitionTypes.h"
+#include "core/RecognitionTypes.h"
 
 class QTimer;
 

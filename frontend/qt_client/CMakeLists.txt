@@ -20,19 +20,43 @@ else()
     find_package(Qt6 QUIET COMPONENTS Multimedia)
 endif()
 
+set(QT_CLIENT_APP_SOURCES
+    src/app/main.cpp
+    src/app/MainWindow.cpp
+    include/app/MainWindow.h
+)
+
+set(QT_CLIENT_API_SOURCES
+    src/api/AlgorithmServiceClient.cpp
+    include/api/AlgorithmServiceClient.h
+)
+
+set(QT_CLIENT_SERVICE_SOURCES
+    src/services/ResultExportService.cpp
+    include/services/ResultExportService.h
+)
+
+set(QT_CLIENT_WIDGET_SOURCES
+    src/widgets/VideoDisplayWidget.cpp
+    include/widgets/VideoDisplayWidget.h
+)
+
+set(QT_CLIENT_WORKER_SOURCES
+    src/workers/VideoStreamWorker.cpp
+    include/workers/VideoStreamWorker.h
+)
+
+set(QT_CLIENT_SHARED_HEADERS
+    include/core/RecognitionTypes.h
+)
+
 set(QT_CLIENT_SOURCES
-    src/main.cpp
-    src/MainWindow.cpp
-    src/VideoDisplayWidget.cpp
-    src/VideoStreamWorker.cpp
-    src/AlgorithmServiceClient.cpp
-    src/ResultExportService.cpp
-    include/MainWindow.h
-    include/RecognitionTypes.h
-    include/VideoDisplayWidget.h
-    include/VideoStreamWorker.h
-    include/AlgorithmServiceClient.h
-    include/ResultExportService.h
+    ${QT_CLIENT_APP_SOURCES}
+    ${QT_CLIENT_API_SOURCES}
+    ${QT_CLIENT_SERVICE_SOURCES}
+    ${QT_CLIENT_WIDGET_SOURCES}
+    ${QT_CLIENT_WORKER_SOURCES}
+    ${QT_CLIENT_SHARED_HEADERS}
     ui/MainWindow.ui
     resources/resources.qrc
 )
@@ -59,17 +83,13 @@ if(BUILD_QT_CLIENT_TESTS)
     add_executable(
         ${PROJECT_NAME}Tests
         tests/tst_MainWindow.cpp
-        src/MainWindow.cpp
-        src/VideoDisplayWidget.cpp
-        src/VideoStreamWorker.cpp
-        src/AlgorithmServiceClient.cpp
-        src/ResultExportService.cpp
-        include/MainWindow.h
-        include/RecognitionTypes.h
-        include/VideoDisplayWidget.h
-        include/VideoStreamWorker.h
-        include/AlgorithmServiceClient.h
-        include/ResultExportService.h
+        ${QT_CLIENT_API_SOURCES}
+        ${QT_CLIENT_SERVICE_SOURCES}
+        ${QT_CLIENT_WIDGET_SOURCES}
+        ${QT_CLIENT_WORKER_SOURCES}
+        ${QT_CLIENT_SHARED_HEADERS}
+        src/app/MainWindow.cpp
+        include/app/MainWindow.h
         ui/MainWindow.ui
         resources/resources.qrc
     )

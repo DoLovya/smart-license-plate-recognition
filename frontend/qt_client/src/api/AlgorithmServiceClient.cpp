@@ -1,4 +1,4 @@
-#include "../include/AlgorithmServiceClient.h"
+#include "api/AlgorithmServiceClient.h"
 
 #include <QBuffer>
 #include <QDateTime>

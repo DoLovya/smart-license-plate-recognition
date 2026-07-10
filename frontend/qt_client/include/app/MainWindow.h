@@ -6,7 +6,7 @@
 #include <QVector>
 #include <QWidget>
 
-#include "RecognitionTypes.h"
+#include "core/RecognitionTypes.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui

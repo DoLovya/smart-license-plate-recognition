@@ -3,7 +3,7 @@
 #include <QString>
 #include <QVector>
 
-#include "RecognitionTypes.h"
+#include "core/RecognitionTypes.h"
 
 class ResultExportService
 {
