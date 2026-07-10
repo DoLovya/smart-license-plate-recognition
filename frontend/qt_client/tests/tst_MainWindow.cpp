@@ -2,6 +2,8 @@
 #include <QFile>
 #include <QImage>
 #include <QLabel>
+#include <QListWidget>
+#include <QListView>
 #include <QMenu>
 #include <QPushButton>
 #include <QSharedPointer>
@@ -105,9 +107,14 @@ private slots:
             requestReceived_ = true;
             ++requestCount_;
 
+            const QString plateText =
+                requestCount_ == 1 ? QString::fromUtf8("沪A12345") : QString::fromUtf8("粤B54321");
             const QByteArray responseBody =
-                "{\"image_id\":\"UnitTestImage\",\"plate_text\":\"沪A12345\",\"confidence\":0.98,"
-                "\"boxes\":[],\"elapsed_ms\":12.3}";
+                QString("{\"image_id\":\"UnitTestImage%1\",\"plate_text\":\"%2\",\"confidence\":0.98,"
+                        "\"boxes\":[],\"elapsed_ms\":12.3}")
+                    .arg(requestCount_)
+                    .arg(plateText)
+                    .toUtf8();
             const QByteArray response =
                 "HTTP/1.1 200 OK\r\n"
                 "Content-Type: application/json\r\n"
@@ -151,6 +158,7 @@ private slots:
     void shouldRejectInvalidImportedImage();
     void shouldTriggerBackendRecognitionAfterLoadingImage();
     void shouldTriggerBackendRecognitionForConfiguredDirectory();
+    void shouldSwitchDisplayedResultWhenSelectingDifferentDirectoryImage();
     void shouldStopDetectionForConfiguredDirectory();
     void shouldExportRecognitionRecords();
 };
@@ -169,6 +177,7 @@ void MainWindowTest::shouldInitializeCoreControls()
     auto* startButton = window.findChild<QPushButton*>("startButton");
     auto* stopButton = window.findChild<QPushButton*>("stopButton");
     auto* exportButton = window.findChild<QPushButton*>("exportButton");
+    auto* imageListWidget = window.findChild<QListWidget*>("imageListWidget");
     auto* menuBar = window.findChild<QMenuBar*>("mainMenuBar");
 
     QVERIFY(uploadButton != nullptr);
@@ -176,6 +185,7 @@ void MainWindowTest::shouldInitializeCoreControls()
     QVERIFY(startButton != nullptr);
     QVERIFY(stopButton != nullptr);
     QVERIFY(exportButton != nullptr);
+    QVERIFY(imageListWidget != nullptr);
     QVERIFY(menuBar != nullptr);
     QVERIFY(window.findChild<QObject*>("themeComboBox") == nullptr);
     QVERIFY(menuBar->actions().size() == 1);
@@ -186,6 +196,7 @@ void MainWindowTest::shouldInitializeCoreControls()
     QVERIFY(!window.hasLoadedImage());
     QVERIFY(!startButton->isEnabled());
     QVERIFY(!stopButton->isEnabled());
+    QCOMPARE(imageListWidget->viewMode(), QListView::IconMode);
 }
 
 void MainWindowTest::shouldRejectInvalidImportedImage()
@@ -273,12 +284,16 @@ void MainWindowTest::shouldTriggerBackendRecognitionForConfiguredDirectory()
     QVERIFY2(errorMessage.isEmpty(), qPrintable(errorMessage));
 
     auto* startButton = window.findChild<QPushButton*>("startButton");
+    auto* imageListWidget = window.findChild<QListWidget*>("imageListWidget");
     auto* statusLabel = window.findChild<QLabel*>("statusValueLabel");
     auto* progressLabel = window.findChild<QLabel*>("batchProgressValueLabel");
     QVERIFY(startButton != nullptr);
+    QVERIFY(imageListWidget != nullptr);
     QVERIFY(statusLabel != nullptr);
     QVERIFY(progressLabel != nullptr);
     QVERIFY(startButton->isEnabled());
+    QCOMPARE(imageListWidget->count(), 2);
+    QVERIFY(!imageListWidget->item(0)->icon().isNull());
 
     QTest::mouseClick(startButton, Qt::LeftButton);
 
@@ -286,6 +301,46 @@ void MainWindowTest::shouldTriggerBackendRecognitionForConfiguredDirectory()
     QTRY_COMPARE(window.resultCount(), 2);
     QTRY_COMPARE(statusLabel->text(), QString::fromUtf8("批量检测完成: 成功 2 张, 失败 0 张"));
     QCOMPARE(progressLabel->text(), QString::fromUtf8("完成 2 / 2 (成功 2, 失败 0)"));
+}
+
+void MainWindowTest::shouldSwitchDisplayedResultWhenSelectingDifferentDirectoryImage()
+{
+    TestRecognitionServer server;
+    QVERIFY(server.start());
+
+    MainWindow window;
+    window.setServiceEndpoint(server.endpoint());
+
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+
+    QImage imageA(1280, 720, QImage::Format_RGB32);
+    imageA.fill(Qt::darkBlue);
+    QVERIFY(imageA.save(tempDir.filePath("plate_a.png"), "PNG"));
+
+    QImage imageB(960, 540, QImage::Format_RGB32);
+    imageB.fill(Qt::darkGreen);
+    QVERIFY(imageB.save(tempDir.filePath("plate_b.jpg"), "JPG"));
+
+    QString errorMessage;
+    QVERIFY(window.loadImagesFromDirectory(tempDir.path(), &errorMessage));
+    QVERIFY2(errorMessage.isEmpty(), qPrintable(errorMessage));
+
+    auto* startButton = window.findChild<QPushButton*>("startButton");
+    auto* imageListWidget = window.findChild<QListWidget*>("imageListWidget");
+    QVERIFY(startButton != nullptr);
+    QVERIFY(imageListWidget != nullptr);
+
+    QTest::mouseClick(startButton, Qt::LeftButton);
+    QTRY_COMPARE(window.resultCount(), 2);
+
+    imageListWidget->setCurrentRow(0);
+    QTRY_COMPARE(window.latestPlateText(), QString::fromUtf8("沪A12345"));
+    QVERIFY(!imageListWidget->item(0)->icon().isNull());
+
+    imageListWidget->setCurrentRow(1);
+    QTRY_COMPARE(window.latestPlateText(), QString::fromUtf8("粤B54321"));
+    QVERIFY(!imageListWidget->item(1)->icon().isNull());
 }
 
 void MainWindowTest::shouldStopDetectionForConfiguredDirectory()

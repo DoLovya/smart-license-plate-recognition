@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QImage>
+#include <QHash>
+#include <QIcon>
 #include <QResizeEvent>
 #include <QStringList>
 #include <QUrl>
@@ -19,6 +21,7 @@ QT_END_NAMESPACE
 class AlgorithmServiceClient;
 class QActionGroup;
 class ImagePreviewWidget;
+class QListWidgetItem;
 class ResultExportService;
 
 class MainWindow final : public QWidget
@@ -56,6 +59,7 @@ private:
     void applyTheme(const QString& themeId, bool persist = true);
     void updateContentPaneWidths();
     void updateSourceSummary();
+    void resetCurrentResultPanel();
     void refreshResultPanel(const RecognitionRecord& record);
     void appendHistoryRow(const RecognitionRecord& record);
     void clearCurrentImage();
@@ -63,6 +67,13 @@ private:
     void clearDirectorySelection();
     bool hasConfiguredDirectory() const;
     QStringList collectDirectoryImages(const QString& directoryPath) const;
+    void populateImageList(const QStringList& imagePaths);
+    void selectImageListItem(const QString& filePath);
+    void updateImageListItem(const QString& filePath);
+    void syncResultPanelForCurrentImage();
+    QString ensureImageId(const QString& filePath);
+    QIcon buildThumbnailIcon(const QString& filePath);
+    QString buildImageListText(const QString& filePath) const;
     bool previewFirstDirectoryImage(QString* errorMessage);
     void startSingleImageDetection();
     void startDirectoryDetection();
@@ -82,6 +93,7 @@ private slots:
     void handleRecognitionReady(const RecognitionRecord& record);
     void handleServiceStateChanged(const QString& statusText);
     void handleDetectionFailed(const QString& errorMessage);
+    void handleImageListSelectionChanged(QListWidgetItem* current, QListWidgetItem* previous);
     void handleThemeActionTriggered();
 
 private:
@@ -91,10 +103,14 @@ private:
     AlgorithmServiceClient* serviceClient_;
     ResultExportService* exportService_;
     QVector<RecognitionRecord> recognitionHistory_;
+    QHash<QString, RecognitionRecord> recognitionRecordsByPath_;
+    QHash<QString, QString> imageIdsByPath_;
+    QHash<QString, QIcon> thumbnailIconsByPath_;
     QString importedImagePath_;
     QString importedImageId_;
     QString configuredDirectoryPath_;
     QStringList configuredDirectoryImages_;
+    QString pendingRecognitionImagePath_;
     bool detectionRunning_ = false;
     QImage importedImage_;
     InputMode inputMode_ = InputMode::None;

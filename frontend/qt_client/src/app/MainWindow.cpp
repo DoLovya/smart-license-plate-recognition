@@ -15,9 +15,13 @@
 #include <QFileInfo>
 #include <QHeaderView>
 #include <QImageReader>
+#include <QListView>
 #include <QLabel>
+#include <QListWidget>
+#include <QListWidgetItem>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QPixmap>
 #include <QPushButton>
 #include <QSettings>
 #include <QSignalBlocker>
@@ -42,8 +46,12 @@ constexpr int kMaxImageWidth = 8192;
 constexpr int kMaxImageHeight = 8192;
 constexpr qreal kPreviewPaneRatio = 0.70;
 constexpr int kPreviewPaneMinWidth = 680;
+constexpr int kThumbnailPaneWidth = 190;
 constexpr int kResultPaneMinWidth = 320;
 constexpr int kResultPaneMaxWidth = 460;
+constexpr int kThumbnailIconSize = 120;
+constexpr int kThumbnailGridWidth = 148;
+constexpr int kThumbnailGridHeight = 156;
 constexpr char kThemeSettingsKey[] = "ui/theme";
 constexpr char kImageDirectorySettingsKey[] = "input/image_directory";
 
@@ -149,7 +157,9 @@ bool MainWindow::loadImageFromFile(const QString& filePath, QString* errorMessag
 
     clearDirectorySelection();
     inputMode_ = InputMode::SingleImage;
+    populateImageList({filePath});
     applyCurrentImage(filePath, image);
+    selectImageListItem(filePath);
     ui_->statusValueLabel->setText(
         tr("图片已就绪: %1 (%2x%3)")
             .arg(QFileInfo(filePath).fileName())
@@ -179,9 +189,11 @@ bool MainWindow::loadImagesFromDirectory(const QString& directoryPath, QString* 
     }
 
     clearCurrentImage();
+    clearDirectorySelection();
     configuredDirectoryPath_ = directoryInfo.absoluteFilePath();
     configuredDirectoryImages_ = imagePaths;
     inputMode_ = InputMode::ImageDirectory;
+    populateImageList(configuredDirectoryImages_);
     activeDirectoryIndex_ = -1;
     directorySuccessCount_ = 0;
     directoryFailureCount_ = 0;
@@ -233,10 +245,23 @@ void MainWindow::setupWindow()
     imagePreview_ = new ImagePreviewWidget(ui_->previewSurfaceContainer);
     imagePreview_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     ui_->previewSurfaceLayout->addWidget(imagePreview_);
-    ui_->contentLayout->setStretch(0, 3);
-    ui_->contentLayout->setStretch(1, 1);
+    ui_->contentLayout->setStretch(0, 5);
+    ui_->contentLayout->setStretch(1, 0);
+    ui_->contentLayout->setStretch(2, 2);
     ui_->previewCardFrame->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+    ui_->imageListFrame->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
     ui_->resultPanelFrame->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+
+    ui_->imageListWidget->setViewMode(QListView::IconMode);
+    ui_->imageListWidget->setFlow(QListView::TopToBottom);
+    ui_->imageListWidget->setMovement(QListView::Static);
+    ui_->imageListWidget->setResizeMode(QListView::Adjust);
+    ui_->imageListWidget->setWrapping(false);
+    ui_->imageListWidget->setSpacing(8);
+    ui_->imageListWidget->setIconSize(QSize(kThumbnailIconSize, kThumbnailIconSize));
+    ui_->imageListWidget->setGridSize(QSize(kThumbnailGridWidth, kThumbnailGridHeight));
+    ui_->imageListWidget->setWordWrap(true);
+    ui_->imageListWidget->setUniformItemSizes(true);
 
     ui_->resultTableWidget->horizontalHeader()->setStretchLastSection(true);
     ui_->resultTableWidget->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
@@ -245,7 +270,7 @@ void MainWindow::setupWindow()
 
     ui_->statusValueLabel->setText(tr("待导入图片"));
     ui_->backendStatusValueLabel->setText(tr("待连接"));
-    ui_->sourceValueLabel->setText("--");
+    resetCurrentResultPanel();
     ui_->sourceModeValueLabel->setText(tr("未配置"));
     ui_->directoryValueLabel->setText("--");
     ui_->batchProgressValueLabel->setText("--");
@@ -281,25 +306,28 @@ void MainWindow::updateContentPaneWidths()
         return;
     }
 
-    const int layoutWidth = contentGeometry.width() - ui_->contentLayout->spacing();
+    const int layoutWidth = contentGeometry.width() - (ui_->contentLayout->spacing() * 2);
     if (layoutWidth <= 0) {
         return;
     }
 
-    int previewWidth = qRound(layoutWidth * kPreviewPaneRatio);
-    int resultWidth = layoutWidth - previewWidth;
+    const int thumbnailWidth = kThumbnailPaneWidth;
+    int previewWidth = qRound((layoutWidth - thumbnailWidth) * kPreviewPaneRatio);
+    int resultWidth = layoutWidth - thumbnailWidth - previewWidth;
 
     resultWidth = qMax(kResultPaneMinWidth, resultWidth);
     resultWidth = qMin(kResultPaneMaxWidth, resultWidth);
-    previewWidth = qMax(kPreviewPaneMinWidth, layoutWidth - resultWidth);
+    previewWidth = qMax(kPreviewPaneMinWidth, layoutWidth - thumbnailWidth - resultWidth);
 
-    if (previewWidth + resultWidth > layoutWidth) {
-        previewWidth = qMax(kPreviewPaneMinWidth, layoutWidth - kResultPaneMinWidth);
-        resultWidth = qMax(kResultPaneMinWidth, layoutWidth - previewWidth);
+    if (previewWidth + thumbnailWidth + resultWidth > layoutWidth) {
+        previewWidth = qMax(kPreviewPaneMinWidth, layoutWidth - thumbnailWidth - kResultPaneMinWidth);
+        resultWidth = qMax(kResultPaneMinWidth, layoutWidth - thumbnailWidth - previewWidth);
     }
 
     ui_->previewCardFrame->setMinimumWidth(previewWidth);
     ui_->previewCardFrame->setMaximumWidth(previewWidth);
+    ui_->imageListFrame->setMinimumWidth(thumbnailWidth);
+    ui_->imageListFrame->setMaximumWidth(thumbnailWidth);
     ui_->resultPanelFrame->setMinimumWidth(resultWidth);
     ui_->resultPanelFrame->setMaximumWidth(resultWidth);
 }
@@ -311,6 +339,11 @@ void MainWindow::connectSignals()
     connect(ui_->startButton, &QPushButton::clicked, this, &MainWindow::startDetection);
     connect(ui_->stopButton, &QPushButton::clicked, this, &MainWindow::stopDetection);
     connect(ui_->exportButton, &QPushButton::clicked, this, &MainWindow::exportResults);
+    connect(
+        ui_->imageListWidget,
+        &QListWidget::currentItemChanged,
+        this,
+        &MainWindow::handleImageListSelectionChanged);
     connect(themeActionGroup_, &QActionGroup::triggered, this, &MainWindow::handleThemeActionTriggered);
     connect(serviceClient_, &AlgorithmServiceClient::recognitionReady, this, &MainWindow::handleRecognitionReady);
     connect(serviceClient_, &AlgorithmServiceClient::serviceStateChanged, this, &MainWindow::handleServiceStateChanged);
@@ -328,6 +361,7 @@ void MainWindow::applyControlState(bool running)
     ui_->startButton->setEnabled(!running && readyToStart);
     ui_->stopButton->setEnabled(running);
     ui_->exportButton->setEnabled(!running);
+    ui_->imageListWidget->setEnabled(!running && ui_->imageListWidget->count() > 0);
 }
 
 void MainWindow::applyTheme(const QString& themeId, bool persist)
@@ -345,6 +379,14 @@ void MainWindow::applyTheme(const QString& themeId, bool persist)
         QSettings settings;
         settings.setValue(QString::fromLatin1(kThemeSettingsKey), themeId);
     }
+}
+
+void MainWindow::resetCurrentResultPanel()
+{
+    ui_->currentPlateValueLabel->setText("--");
+    ui_->confidenceValueLabel->setText("--");
+    ui_->timestampValueLabel->setText("--");
+    ui_->sourceValueLabel->setText("--");
 }
 
 void MainWindow::updateSourceSummary()
@@ -413,25 +455,31 @@ void MainWindow::clearCurrentImage()
     importedImageId_.clear();
     importedImage_ = QImage();
     imagePreview_->setImage(QImage());
-    ui_->sourceValueLabel->setText("--");
+    resetCurrentResultPanel();
 }
 
 void MainWindow::applyCurrentImage(const QString& filePath, const QImage& image)
 {
     importedImagePath_ = filePath;
-    importedImageId_ = buildImageId(filePath);
+    importedImageId_ = ensureImageId(filePath);
     importedImage_ = image;
     imagePreview_->setImage(importedImage_);
-    ui_->sourceValueLabel->setText(importedImageId_);
+    selectImageListItem(filePath);
+    syncResultPanelForCurrentImage();
 }
 
 void MainWindow::clearDirectorySelection()
 {
     configuredDirectoryPath_.clear();
     configuredDirectoryImages_.clear();
+    recognitionRecordsByPath_.clear();
+    imageIdsByPath_.clear();
+    thumbnailIconsByPath_.clear();
+    pendingRecognitionImagePath_.clear();
     activeDirectoryIndex_ = -1;
     directorySuccessCount_ = 0;
     directoryFailureCount_ = 0;
+    populateImageList({});
 }
 
 bool MainWindow::hasConfiguredDirectory() const
@@ -453,6 +501,113 @@ QStringList MainWindow::collectDirectoryImages(const QString& directoryPath) con
         }
     }
     return imagePaths;
+}
+
+void MainWindow::populateImageList(const QStringList& imagePaths)
+{
+    const QSignalBlocker blocker(ui_->imageListWidget);
+    ui_->imageListWidget->clear();
+
+    for (const QString& imagePath : imagePaths) {
+        auto* item = new QListWidgetItem(buildImageListText(imagePath), ui_->imageListWidget);
+        item->setData(Qt::UserRole, imagePath);
+        item->setIcon(buildThumbnailIcon(imagePath));
+        item->setTextAlignment(Qt::AlignHCenter);
+        item->setToolTip(QDir::toNativeSeparators(imagePath));
+    }
+
+    ui_->imageListWidget->setEnabled(!detectionRunning_ && ui_->imageListWidget->count() > 0);
+}
+
+void MainWindow::selectImageListItem(const QString& filePath)
+{
+    const QSignalBlocker blocker(ui_->imageListWidget);
+    for (int row = 0; row < ui_->imageListWidget->count(); ++row) {
+        QListWidgetItem* item = ui_->imageListWidget->item(row);
+        if (item != nullptr && item->data(Qt::UserRole).toString() == filePath) {
+            ui_->imageListWidget->setCurrentItem(item);
+            return;
+        }
+    }
+}
+
+void MainWindow::updateImageListItem(const QString& filePath)
+{
+    for (int row = 0; row < ui_->imageListWidget->count(); ++row) {
+        QListWidgetItem* item = ui_->imageListWidget->item(row);
+        if (item != nullptr && item->data(Qt::UserRole).toString() == filePath) {
+            item->setText(buildImageListText(filePath));
+            item->setIcon(buildThumbnailIcon(filePath));
+            const QString tooltip =
+                recognitionRecordsByPath_.contains(filePath)
+                    ? tr("%1\n识别结果: %2")
+                          .arg(QDir::toNativeSeparators(filePath), recognitionRecordsByPath_.value(filePath).plateText)
+                    : QDir::toNativeSeparators(filePath);
+            item->setToolTip(tooltip);
+            return;
+        }
+    }
+}
+
+void MainWindow::syncResultPanelForCurrentImage()
+{
+    if (importedImagePath_.isEmpty()) {
+        resetCurrentResultPanel();
+        return;
+    }
+
+    if (recognitionRecordsByPath_.contains(importedImagePath_)) {
+        refreshResultPanel(recognitionRecordsByPath_.value(importedImagePath_));
+        return;
+    }
+
+    ui_->currentPlateValueLabel->setText("--");
+    ui_->confidenceValueLabel->setText("--");
+    ui_->timestampValueLabel->setText("--");
+    ui_->sourceValueLabel->setText(importedImageId_.isEmpty() ? ensureImageId(importedImagePath_) : importedImageId_);
+}
+
+QString MainWindow::ensureImageId(const QString& filePath)
+{
+    const auto it = imageIdsByPath_.constFind(filePath);
+    if (it != imageIdsByPath_.constEnd()) {
+        return it.value();
+    }
+
+    const QString imageId = buildImageId(filePath);
+    imageIdsByPath_.insert(filePath, imageId);
+    return imageId;
+}
+
+QIcon MainWindow::buildThumbnailIcon(const QString& filePath)
+{
+    const auto it = thumbnailIconsByPath_.constFind(filePath);
+    if (it != thumbnailIconsByPath_.constEnd()) {
+        return it.value();
+    }
+
+    QImageReader reader(filePath);
+    reader.setAutoTransform(true);
+    const QImage image = reader.read();
+    if (image.isNull()) {
+        return QIcon();
+    }
+
+    const QPixmap pixmap = QPixmap::fromImage(
+        image.scaled(kThumbnailIconSize, kThumbnailIconSize, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    const QIcon icon(pixmap);
+    thumbnailIconsByPath_.insert(filePath, icon);
+    return icon;
+}
+
+QString MainWindow::buildImageListText(const QString& filePath) const
+{
+    const QString baseName = QFileInfo(filePath).completeBaseName();
+    if (baseName.size() <= 18) {
+        return baseName;
+    }
+
+    return tr("%1...%2").arg(baseName.left(8), baseName.right(7));
 }
 
 bool MainWindow::previewFirstDirectoryImage(QString* errorMessage)
@@ -488,8 +643,10 @@ void MainWindow::startSingleImageDetection()
     }
 
     applyCurrentImage(importedImagePath_, validatedImage);
+    pendingRecognitionImagePath_ = importedImagePath_;
 
     if (!serviceClient_->submitImage(importedImagePath_, importedImageId_)) {
+        pendingRecognitionImagePath_.clear();
         applyControlState(false);
         return;
     }
@@ -537,7 +694,9 @@ void MainWindow::submitNextDirectoryImage()
                 .arg(QFileInfo(filePath).fileName()));
         updateSourceSummary();
 
+        pendingRecognitionImagePath_ = importedImagePath_;
         if (!serviceClient_->submitImage(importedImagePath_, importedImageId_)) {
+            pendingRecognitionImagePath_.clear();
             return;
         }
 
@@ -550,6 +709,7 @@ void MainWindow::submitNextDirectoryImage()
 
 void MainWindow::finishDirectoryDetection()
 {
+    pendingRecognitionImagePath_.clear();
     activeDirectoryIndex_ = -1;
     applyControlState(false);
     if (stopRequested_) {
@@ -571,6 +731,7 @@ void MainWindow::finishDirectoryDetection()
 
 void MainWindow::stopDetectionInternal()
 {
+    pendingRecognitionImagePath_.clear();
     applyControlState(false);
     ui_->backendStatusValueLabel->setText(tr("检测已停止"));
     ui_->statusValueLabel->setText(tr("检测已停止"));
@@ -751,9 +912,17 @@ void MainWindow::exportResults()
 
 void MainWindow::handleRecognitionReady(const RecognitionRecord& record)
 {
+    const QString completedImagePath = pendingRecognitionImagePath_;
+    pendingRecognitionImagePath_.clear();
+
     if (stopRequested_) {
         stopDetectionInternal();
         return;
+    }
+
+    if (!completedImagePath.isEmpty()) {
+        recognitionRecordsByPath_.insert(completedImagePath, record);
+        updateImageListItem(completedImagePath);
     }
 
     recognitionHistory_.prepend(record);
@@ -786,6 +955,8 @@ void MainWindow::handleServiceStateChanged(const QString& statusText)
 
 void MainWindow::handleDetectionFailed(const QString& errorMessage)
 {
+    pendingRecognitionImagePath_.clear();
+
     if (stopRequested_) {
         if (inputMode_ == InputMode::ImageDirectory) {
             finishDirectoryDetection();
@@ -826,4 +997,25 @@ void MainWindow::handleThemeActionTriggered()
     }
 
     applyTheme(checkedAction->data().toString());
+}
+
+void MainWindow::handleImageListSelectionChanged(QListWidgetItem* current, QListWidgetItem* previous)
+{
+    Q_UNUSED(previous);
+
+    if (current == nullptr || detectionRunning_) {
+        return;
+    }
+
+    const QString filePath = current->data(Qt::UserRole).toString();
+    if (filePath.isEmpty() || filePath == importedImagePath_) {
+        return;
+    }
+
+    QImage image;
+    if (!validateImportedImage(filePath, nullptr, &image)) {
+        return;
+    }
+
+    applyCurrentImage(filePath, image);
 }
