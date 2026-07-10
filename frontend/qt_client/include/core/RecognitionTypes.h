@@ -5,15 +5,6 @@
 #include <QSize>
 #include <QString>
 
-struct CameraDevice
-{
-    QString displayName;
-    QString deviceId;
-    bool isDemo = false;
-};
-
-Q_DECLARE_METATYPE(CameraDevice)
-
 struct RecognitionRecord
 {
     QString plateText;

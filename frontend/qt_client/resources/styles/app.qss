@@ -5,11 +5,11 @@ QWidget#MainWindow {
 }
 
 QFrame#headerFrame,
-QFrame#videoCardFrame,
+QFrame#previewCardFrame,
 QFrame#controlPanelFrame,
 QFrame#resultPanelFrame,
 QFrame#latestResultFrame,
-QFrame#videoSurfaceContainer {
+QFrame#previewSurfaceContainer {
     background: #0d1726;
     border: 1px solid #18314f;
     border-radius: 18px;
@@ -27,13 +27,13 @@ QLabel#titleLabel {
 }
 
 QLabel#subtitleLabel,
-QLabel#videoSectionHintLabel,
+QLabel#previewSectionHintLabel,
 QLabel#resultSectionHintLabel {
     font-size: 14px;
     color: #7fa1c8;
 }
 
-QLabel#videoSectionLabel,
+QLabel#previewSectionLabel,
 QLabel#resultSectionLabel,
 QLabel#historyTitleLabel {
     font-size: 20px;
@@ -42,7 +42,6 @@ QLabel#historyTitleLabel {
 }
 
 QLabel#statusValueLabel,
-QLabel#fpsValueLabel,
 QLabel#backendStatusValueLabel {
     color: #69d1ff;
     font-weight: 600;
@@ -62,8 +61,7 @@ QLabel#sourceValueLabel {
     color: #dcefff;
 }
 
-QPushButton,
-QComboBox {
+QPushButton {
     min-height: 40px;
     padding: 0 14px;
     border-radius: 12px;
@@ -73,8 +71,7 @@ QComboBox {
     font-size: 14px;
 }
 
-QPushButton:hover,
-QComboBox:hover {
+QPushButton:hover {
     background: #18314f;
     border-color: #56b5ff;
 }
@@ -84,23 +81,10 @@ QPushButton:pressed {
     border-color: #90ddff;
 }
 
-QPushButton:disabled,
-QComboBox:disabled {
+QPushButton:disabled {
     color: #5e738f;
     background: #0c1521;
     border-color: #1a2940;
-}
-
-QComboBox::drop-down {
-    border: none;
-    width: 28px;
-}
-
-QComboBox QAbstractItemView {
-    background: #13243b;
-    color: #f3fbff;
-    border: 1px solid #29517e;
-    selection-background-color: #225a9c;
 }
 
 QTableWidget {

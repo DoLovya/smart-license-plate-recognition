@@ -1,4 +1,4 @@
-#include "widgets/VideoDisplayWidget.h"
+#include "widgets/ImagePreviewWidget.h"
 
 #include <QPainter>
 #include <QPainterPath>
@@ -9,30 +9,30 @@ namespace
 constexpr qreal kAspectRatio = 16.0 / 9.0;
 }
 
-VideoDisplayWidget::VideoDisplayWidget(QWidget* parent) : QFrame(parent)
+ImagePreviewWidget::ImagePreviewWidget(QWidget* parent) : QFrame(parent)
 {
-    setObjectName("videoDisplayWidget");
+    setObjectName("imagePreviewWidget");
     setFrameShape(QFrame::NoFrame);
     setMinimumSize(960, 540);
 }
 
-void VideoDisplayWidget::setFrame(const QImage& frame)
+void ImagePreviewWidget::setImage(const QImage& image)
 {
-    currentFrame_ = frame;
+    currentImage_ = image;
     update();
 }
 
-QImage VideoDisplayWidget::currentFrame() const
+QImage ImagePreviewWidget::currentImage() const
 {
-    return currentFrame_;
+    return currentImage_;
 }
 
-QSize VideoDisplayWidget::sizeHint() const
+QSize ImagePreviewWidget::sizeHint() const
 {
     return QSize(1280, 720);
 }
 
-void VideoDisplayWidget::paintEvent(QPaintEvent* event)
+void ImagePreviewWidget::paintEvent(QPaintEvent* event)
 {
     QFrame::paintEvent(event);
 
@@ -40,28 +40,28 @@ void VideoDisplayWidget::paintEvent(QPaintEvent* event)
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.fillRect(rect(), QColor("#07101c"));
 
-    const QRect target = videoRect();
+    const QRect target = imageRect();
     QPainterPath clipPath;
     clipPath.addRoundedRect(target, 18, 18);
     painter.fillPath(clipPath, QColor("#0d1828"));
     painter.setClipPath(clipPath);
 
-    if (currentFrame_.isNull()) {
+    if (currentImage_.isNull()) {
         painter.fillRect(target, QColor("#0d1828"));
         painter.setPen(QColor("#5bc7ff"));
-        painter.drawText(target, Qt::AlignCenter, tr("等待视频流或图像输入"));
+        painter.drawText(target, Qt::AlignCenter, tr("请先导入静态图片"));
         return;
     }
 
     const QImage scaledFrame =
-        currentFrame_.scaled(target.size(), Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+        currentImage_.scaled(target.size(), Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
     const QPoint topLeft(
         target.center().x() - (scaledFrame.width() / 2),
         target.center().y() - (scaledFrame.height() / 2));
     painter.drawImage(topLeft, scaledFrame);
 }
 
-QRect VideoDisplayWidget::videoRect() const
+QRect ImagePreviewWidget::imageRect() const
 {
     QRect content = rect().adjusted(8, 8, -8, -8);
     int width = content.width();

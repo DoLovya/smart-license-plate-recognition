@@ -2,10 +2,10 @@
 
 ## 1. 验证范围
 
-- 控件初始化与检测启停
+- 静态图片导入与合法性校验
+- “开始检测”真实触发后端 HTTP 检测
 - 识别结果面板与历史表刷新
 - CSV 导出落盘
-- 后端 HTTP 接口预留（Mock 模式可独立运行）
 - CMake + ctest 单元测试
 
 ## 2. 单元测试项
@@ -13,8 +13,8 @@
 | 用例 | 用途 |
 | --- | --- |
 | `shouldInitializeCoreControls` | 验证关键控件已创建 |
-| `shouldToggleDetectionControls` | 验证启停按钮状态切换 |
-| `shouldUpdateRecognitionPanelAfterSubmittingFrame` | 验证提交帧后异步刷新结果面板 |
+| `shouldRejectInvalidImportedImage` | 验证非法文件不会启用检测流程 |
+| `shouldTriggerBackendRecognitionAfterLoadingImage` | 验证导入合法图片后真实发起 `/api/v1/recognize` 请求并刷新结果面板 |
 | `shouldExportRecognitionRecords` | 验证 CSV 导出 |
 
 ## 3. 运行方式
@@ -29,12 +29,12 @@ ctest --test-dir frontend/qt_client/build --output-on-failure
 
 | 指标 | 目标 |
 | --- | --- |
-| 视频流渲染 | ≥ 25 fps |
 | UI 操作响应 | ≤ 100 ms |
-| 检测帧推送节流 | 200 ms |
+| 单张图片校验 | ≤ 100 ms |
+| 检测请求触发 | 单次点击触发一次 HTTP 上传 |
 
 ## 5. 联调说明
 
-- 未连接后端时默认走 Mock 模式，界面可联调。
-- 真实摄像头 / 真实 HTTP 字段需在目标环境回归。
-- Qt 5.15 与 Qt 6 双链路支持，CMake 自动选择。
+- 客户端已移除 Demo / Mock / 摄像头路径，仅支持静态图片检测。
+- 本地测试通过 `QTcpServer` 模拟后端，验证前端实际执行 multipart 图片上传。
+- 真实环境需保证后端 `/api/v1/recognize` 可访问并接受字段名为 `file` 的图片上传。

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <QHash>
-#include <QImage>
+#include <QSize>
 #include <QNetworkAccessManager>
 #include <QObject>
 #include <QUrl>
@@ -20,24 +20,25 @@ public:
     void setEndpoint(const QUrl& endpoint);
     QUrl endpoint() const;
 
-    void setMockMode(bool enabled);
-    bool isMockMode() const;
-
 public slots:
-    void submitFrame(const QImage& frame, const QString& imageId);
+    bool submitImage(const QString& filePath, const QString& imageId);
 
 signals:
     void recognitionReady(const RecognitionRecord& record);
     void serviceStateChanged(const QString& stateText);
+    void requestFailed(const QString& errorMessage);
 
 private slots:
     void handleReply(QNetworkReply* reply);
 
 private:
-    RecognitionRecord buildMockRecord(const QImage& frame, const QString& imageId) const;
+    struct PendingRequestContext
+    {
+        QString imageId;
+        QSize imageSize;
+    };
 
     QNetworkAccessManager networkManager_;
-    QHash<QNetworkReply*, QString> pendingRequests_;
+    QHash<QNetworkReply*, PendingRequestContext> pendingRequests_;
     QUrl endpoint_;
-    bool mockMode_ = true;
 };

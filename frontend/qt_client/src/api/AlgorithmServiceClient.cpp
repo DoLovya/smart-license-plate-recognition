@@ -1,14 +1,16 @@
 #include "api/AlgorithmServiceClient.h"
 
-#include <QBuffer>
 #include <QDateTime>
-#include <QImage>
+#include <QFile>
+#include <QFileInfo>
+#include <QHttpMultiPart>
+#include <QHttpPart>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMimeDatabase>
 #include <QNetworkReply>
 #include <QNetworkRequest>
-#include <QRandomGenerator>
-#include <QTimer>
+#include <QImageReader>
 
 AlgorithmServiceClient::AlgorithmServiceClient(QObject* parent) : QObject(parent)
 {
@@ -18,7 +20,7 @@ AlgorithmServiceClient::AlgorithmServiceClient(QObject* parent) : QObject(parent
 void AlgorithmServiceClient::setEndpoint(const QUrl& endpoint)
 {
     endpoint_ = endpoint;
-    emit serviceStateChanged(endpoint_.isValid() ? tr("HTTP Ready") : tr("Mock Ready"));
+    emit serviceStateChanged(endpoint_.isValid() ? tr("后端接口已就绪") : tr("后端接口未配置"));
 }
 
 QUrl AlgorithmServiceClient::endpoint() const
@@ -26,98 +28,89 @@ QUrl AlgorithmServiceClient::endpoint() const
     return endpoint_;
 }
 
-void AlgorithmServiceClient::setMockMode(bool enabled)
+bool AlgorithmServiceClient::submitImage(const QString& filePath, const QString& imageId)
 {
-    mockMode_ = enabled;
-    emit serviceStateChanged(mockMode_ ? tr("Mock Ready") : tr("HTTP Ready"));
-}
-
-bool AlgorithmServiceClient::isMockMode() const
-{
-    return mockMode_;
-}
-
-void AlgorithmServiceClient::submitFrame(const QImage& frame, const QString& imageId)
-{
-    if (frame.isNull()) {
-        emit serviceStateChanged(tr("忽略空帧"));
-        return;
+    if (!endpoint_.isValid()) {
+        emit serviceStateChanged(tr("后端接口未配置"));
+        emit requestFailed(tr("未配置可用的后端检测接口。"));
+        return false;
     }
 
-    if (mockMode_ || !endpoint_.isValid()) {
-        const RecognitionRecord record = buildMockRecord(frame, imageId);
-        QTimer::singleShot(30, this, [this, record]() {
-            emit recognitionReady(record);
-        });
-        return;
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        emit serviceStateChanged(tr("图片读取失败"));
+        emit requestFailed(tr("无法读取图片文件: %1").arg(filePath));
+        return false;
     }
 
-    QByteArray imageBytes;
-    QBuffer buffer(&imageBytes);
-    buffer.open(QIODevice::WriteOnly);
-    frame.save(&buffer, "JPG", 82);
+    const QByteArray fileBytes = file.readAll();
+    if (fileBytes.isEmpty()) {
+        emit serviceStateChanged(tr("图片内容为空"));
+        emit requestFailed(tr("图片文件为空，无法上传检测。"));
+        return false;
+    }
 
-    QJsonObject payload;
-    payload.insert("image_id", imageId);
-    payload.insert("frame_width", frame.width());
-    payload.insert("frame_height", frame.height());
-    payload.insert("captured_at", QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
-    payload.insert("image_base64", QString::fromLatin1(imageBytes.toBase64()));
+    QImageReader reader(filePath);
+    const QSize imageSize = reader.size();
+
+    const QFileInfo fileInfo(filePath);
+    const QString suffix = fileInfo.suffix().toLower();
+    const QString uploadFileName =
+        suffix.isEmpty() ? imageId : QString("%1.%2").arg(imageId, suffix);
+
+    const QMimeDatabase mimeDatabase;
+    const QString mimeType = mimeDatabase.mimeTypeForFile(fileInfo).name();
+
+    auto* multipart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
+    QHttpPart filePart;
+    filePart.setHeader(
+        QNetworkRequest::ContentDispositionHeader,
+        QVariant(QString("form-data; name=\"file\"; filename=\"%1\"").arg(uploadFileName)));
+    filePart.setHeader(
+        QNetworkRequest::ContentTypeHeader,
+        QVariant(mimeType.isEmpty() ? QStringLiteral("application/octet-stream") : mimeType));
+    filePart.setBody(fileBytes);
+    multipart->append(filePart);
 
     QNetworkRequest request(endpoint_);
-    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    QNetworkReply* reply = networkManager_.post(request, multipart);
+    multipart->setParent(reply);
 
-    QNetworkReply* reply = networkManager_.post(request, QJsonDocument(payload).toJson(QJsonDocument::Compact));
-    pendingRequests_.insert(reply, imageId);
-    emit serviceStateChanged(tr("算法服务处理中"));
+    pendingRequests_.insert(reply, PendingRequestContext {imageId, imageSize});
+    emit serviceStateChanged(tr("图片上传中"));
+    return true;
 }
 
 void AlgorithmServiceClient::handleReply(QNetworkReply* reply)
 {
-    const QString imageId = pendingRequests_.take(reply);
+    const PendingRequestContext context = pendingRequests_.take(reply);
     RecognitionRecord record;
-    record.imageId = imageId;
+    record.imageId = context.imageId;
     record.timestamp = QDateTime::currentDateTime();
+    record.frameSize = context.imageSize;
 
     if (reply->error() != QNetworkReply::NoError) {
-        emit serviceStateChanged(tr("算法服务异常，已回退 Mock"));
-        record = buildMockRecord(QImage(1280, 720, QImage::Format_RGB32), imageId);
-        emit recognitionReady(record);
+        emit serviceStateChanged(tr("后端检测失败"));
+        emit requestFailed(reply->errorString());
         reply->deleteLater();
         return;
     }
 
-    const QJsonObject root = QJsonDocument::fromJson(reply->readAll()).object();
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(reply->readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+        emit serviceStateChanged(tr("后端响应异常"));
+        emit requestFailed(tr("后端返回了不可解析的检测结果。"));
+        reply->deleteLater();
+        return;
+    }
+
+    const QJsonObject root = document.object();
     record.plateText = root.value("plate_text").toString("PENDING");
     record.confidence = root.value("confidence").toDouble(0.0);
-    record.timestamp = QDateTime::fromString(root.value("timestamp").toString(), Qt::ISODate);
-    if (!record.timestamp.isValid()) {
-        record.timestamp = QDateTime::currentDateTime();
-    }
-    record.imageId = root.value("image_id").toString(root.value("source").toString(imageId));
-    record.frameSize = QSize(
-        root.value("frame_width").toInt(1280),
-        root.value("frame_height").toInt(720));
+    record.imageId = root.value("image_id").toString(context.imageId);
 
-    emit serviceStateChanged(tr("算法服务已响应"));
+    emit serviceStateChanged(tr("检测完成"));
     emit recognitionReady(record);
     reply->deleteLater();
-}
-
-RecognitionRecord AlgorithmServiceClient::buildMockRecord(const QImage& frame, const QString& imageId) const
-{
-    static const QStringList mockPlates = {
-        "沪A8723P",
-        "粤B6N8T2",
-        "苏E392QK",
-        "京N3Y7F8",
-    };
-
-    RecognitionRecord record;
-    record.plateText = mockPlates.at(QRandomGenerator::global()->bounded(mockPlates.size()));
-    record.confidence = 0.85 + (QRandomGenerator::global()->bounded(14) / 100.0);
-    record.timestamp = QDateTime::currentDateTime();
-    record.imageId = imageId;
-    record.frameSize = frame.size();
-    return record;
 }

@@ -23,7 +23,7 @@ Qt 客户端 ──HTTP──▶ FastAPI 后端 ──调用──▶ algorithms
    └──直接读取──▶ data/ 中的图片/导出             └──加载 weights/ 中的模型
 ```
 
-- 客户端默认 Mock 模式可在无后端情况下联调。
+- Qt 客户端仅支持静态图片检测，必须通过 HTTP 调用后端接口执行识别。
 - 后端通过 `app.services.recognition_service` 调用算法层（占位实现，详见 [api-overview.md](api-overview.md)）。
 - 模型以 git submodule 形式接入，固定子仓库提交。
 

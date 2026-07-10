@@ -42,7 +42,7 @@ cmake --build build
 ./build/SmartLicensePlateQtClient
 ```
 
-CMake 会优先查找 Qt5（5.15），找不到时回退到 Qt6。可选启用 `Multimedia` 模块以支持摄像头枚举。
+CMake 会优先查找 Qt5（5.15），找不到时回退到 Qt6。Qt 客户端当前仅依赖 `Widgets`、`Network`、`Test`，用于静态图片检测流程。
 
 ## 5. 模型子仓库
 

@@ -13,11 +13,9 @@ option(BUILD_QT_CLIENT_TESTS "Build Qt client unit tests" ON)
 find_package(Qt5 5.15 QUIET COMPONENTS Widgets Network Test)
 if(Qt5_FOUND)
     set(QT_PACKAGE Qt5)
-    find_package(Qt5 QUIET COMPONENTS Multimedia)
 else()
     find_package(Qt6 REQUIRED COMPONENTS Widgets Network Test)
     set(QT_PACKAGE Qt6)
-    find_package(Qt6 QUIET COMPONENTS Multimedia)
 endif()
 
 set(QT_CLIENT_APP_SOURCES
@@ -37,13 +35,8 @@ set(QT_CLIENT_SERVICE_SOURCES
 )
 
 set(QT_CLIENT_WIDGET_SOURCES
-    src/widgets/VideoDisplayWidget.cpp
-    include/widgets/VideoDisplayWidget.h
-)
-
-set(QT_CLIENT_WORKER_SOURCES
-    src/workers/VideoStreamWorker.cpp
-    include/workers/VideoStreamWorker.h
+    src/widgets/ImagePreviewWidget.cpp
+    include/widgets/ImagePreviewWidget.h
 )
 
 set(QT_CLIENT_SHARED_HEADERS
@@ -55,7 +48,6 @@ set(QT_CLIENT_SOURCES
     ${QT_CLIENT_API_SOURCES}
     ${QT_CLIENT_SERVICE_SOURCES}
     ${QT_CLIENT_WIDGET_SOURCES}
-    ${QT_CLIENT_WORKER_SOURCES}
     ${QT_CLIENT_SHARED_HEADERS}
     ui/MainWindow.ui
     resources/resources.qrc
@@ -67,10 +59,6 @@ set(QT_CLIENT_LIBS
     ${QT_PACKAGE}::Widgets
     ${QT_PACKAGE}::Network
 )
-if(TARGET ${QT_PACKAGE}::Multimedia)
-    list(APPEND QT_CLIENT_LIBS ${QT_PACKAGE}::Multimedia)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_QT_MULTIMEDIA)
-endif()
 target_link_libraries(
     ${PROJECT_NAME}
     PRIVATE
@@ -86,7 +74,6 @@ if(BUILD_QT_CLIENT_TESTS)
         ${QT_CLIENT_API_SOURCES}
         ${QT_CLIENT_SERVICE_SOURCES}
         ${QT_CLIENT_WIDGET_SOURCES}
-        ${QT_CLIENT_WORKER_SOURCES}
         ${QT_CLIENT_SHARED_HEADERS}
         src/app/MainWindow.cpp
         include/app/MainWindow.h
@@ -95,9 +82,6 @@ if(BUILD_QT_CLIENT_TESTS)
     )
 
     target_include_directories(${PROJECT_NAME}Tests PRIVATE include)
-    if(TARGET ${QT_PACKAGE}::Multimedia)
-        target_compile_definitions(${PROJECT_NAME}Tests PRIVATE HAVE_QT_MULTIMEDIA)
-    endif()
     target_link_libraries(
         ${PROJECT_NAME}Tests
         PRIVATE

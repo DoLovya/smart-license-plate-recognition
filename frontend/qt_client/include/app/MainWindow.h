@@ -1,6 +1,5 @@
 #pragma once
 
-#include <QElapsedTimer>
 #include <QImage>
 #include <QUrl>
 #include <QVector>
@@ -16,9 +15,7 @@ class MainWindow;
 QT_END_NAMESPACE
 
 class AlgorithmServiceClient;
-class QThread;
-class VideoDisplayWidget;
-class VideoStreamWorker;
+class ImagePreviewWidget;
 class ResultExportService;
 
 class MainWindow final : public QWidget
@@ -30,47 +27,40 @@ public:
     ~MainWindow() override;
 
     bool isDetectionRunning() const;
-    int cameraCount() const;
+    bool hasLoadedImage() const;
     int resultCount() const;
     QString latestPlateText() const;
-
-    void submitFrameForRecognition(const QImage& frame, const QString& imageId = QString());
+    bool loadImageFromFile(const QString& filePath, QString* errorMessage = nullptr);
 
 public slots:
     void setServiceEndpoint(const QUrl& endpoint);
 
 private:
     void setupWindow();
-    void setupVideoPipeline();
     void connectSignals();
     void applyControlState(bool running);
     void refreshResultPanel(const RecognitionRecord& record);
     void appendHistoryRow(const RecognitionRecord& record);
-    QVector<CameraDevice> enumerateCameras() const;
-    CameraDevice currentCameraDevice() const;
+    bool validateImportedImage(const QString& filePath, QString* errorMessage, QImage* image = nullptr) const;
+    QString buildImageId(const QString& filePath) const;
     static QString formatConfidence(double confidence);
 
 private slots:
-    void refreshCameraDevices();
     void startDetection();
-    void stopDetection();
     void importImage();
     void exportResults();
-    void handleCameraSelectionChanged(int index);
-    void handleFrameReady(const QImage& frame, double fps, const QString& imageId);
     void handleRecognitionReady(const RecognitionRecord& record);
     void handleServiceStateChanged(const QString& statusText);
+    void handleDetectionFailed(const QString& errorMessage);
 
 private:
     Ui::MainWindow* ui_;
-    VideoDisplayWidget* videoDisplay_;
-    QThread* videoThread_;
-    VideoStreamWorker* videoWorker_;
+    ImagePreviewWidget* imagePreview_;
     AlgorithmServiceClient* serviceClient_;
     ResultExportService* exportService_;
-    QVector<CameraDevice> cameraDevices_;
     QVector<RecognitionRecord> recognitionHistory_;
-    QElapsedTimer submissionThrottle_;
+    QString importedImagePath_;
+    QString importedImageId_;
     bool detectionRunning_ = false;
-    QImage latestFrame_;
+    QImage importedImage_;
 };

@@ -60,7 +60,7 @@
       <item>
        <widget class="QLabel" name="subtitleLabel">
         <property name="text">
-         <string>多摄像头实时识别、图像导入、结果导出与算法服务联动控制台</string>
+         <string>静态图片导入、后端检测触发、结果渲染与历史导出控制台</string>
         </property>
        </widget>
       </item>
@@ -73,11 +73,11 @@
       <number>20</number>
      </property>
      <item>
-      <widget class="QFrame" name="videoCardFrame">
+      <widget class="QFrame" name="previewCardFrame">
        <property name="frameShape">
         <enum>QFrame::StyledPanel</enum>
        </property>
-       <layout class="QVBoxLayout" name="videoCardLayout">
+       <layout class="QVBoxLayout" name="previewCardLayout">
         <property name="spacing">
          <number>16</number>
         </property>
@@ -94,16 +94,16 @@
          <number>18</number>
         </property>
         <item>
-         <widget class="QLabel" name="videoSectionLabel">
+         <widget class="QLabel" name="previewSectionLabel">
           <property name="text">
-           <string>实时视频流显示</string>
+           <string>静态图片预览</string>
           </property>
          </widget>
         </item>
         <item>
-         <widget class="QLabel" name="videoSectionHintLabel">
+         <widget class="QLabel" name="previewSectionHintLabel">
           <property name="text">
-           <string>支持自动枚举摄像头设备切换，视频区按 16:9 比例展示并与采集线程分离。</string>
+           <string>仅支持导入合法静态图片，预览区按 16:9 比例展示并在点击“开始检测”后触发后端接口。</string>
           </property>
           <property name="wordWrap">
            <bool>true</bool>
@@ -111,7 +111,7 @@
          </widget>
         </item>
         <item>
-         <widget class="QFrame" name="videoSurfaceContainer">
+         <widget class="QFrame" name="previewSurfaceContainer">
           <property name="minimumSize">
            <size>
             <width>960</width>
@@ -121,7 +121,7 @@
           <property name="frameShape">
            <enum>QFrame::StyledPanel</enum>
           </property>
-          <layout class="QVBoxLayout" name="videoSurfaceLayout">
+          <layout class="QVBoxLayout" name="previewSurfaceLayout">
            <property name="leftMargin">
             <number>0</number>
            </property>
@@ -174,29 +174,12 @@
               </widget>
              </item>
              <item>
-              <widget class="QComboBox" name="cameraComboBox">
-               <property name="minimumHeight">
-                <number>40</number>
-               </property>
-              </widget>
-             </item>
-             <item>
               <widget class="QPushButton" name="startButton">
                <property name="minimumHeight">
                 <number>40</number>
                </property>
                <property name="text">
                 <string>开始检测</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QPushButton" name="stopButton">
-               <property name="minimumHeight">
-                <number>40</number>
-               </property>
-               <property name="text">
-                <string>停止检测</string>
                </property>
               </widget>
              </item>
@@ -220,7 +203,7 @@
              <item>
               <widget class="QLabel" name="statusCaptionLabel">
                <property name="text">
-                <string>采集状态</string>
+                <string>检测状态</string>
                </property>
               </widget>
              </item>
@@ -243,20 +226,6 @@
                 </size>
                </property>
               </spacer>
-             </item>
-             <item>
-              <widget class="QLabel" name="fpsCaptionLabel">
-               <property name="text">
-                <string>渲染帧率</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLabel" name="fpsValueLabel">
-               <property name="text">
-                <string>0 fps</string>
-               </property>
-              </widget>
              </item>
             </layout>
            </item>
@@ -382,7 +351,7 @@
            <item row="4" column="1">
             <widget class="QLabel" name="backendStatusValueLabel">
              <property name="text">
-              <string>Mock Ready</string>
+              <string>待连接</string>
              </property>
             </widget>
            </item>

@@ -2,58 +2,53 @@
 
 #include "api/AlgorithmServiceClient.h"
 #include "services/ResultExportService.h"
-#include "widgets/VideoDisplayWidget.h"
-#include "workers/VideoStreamWorker.h"
+#include "widgets/ImagePreviewWidget.h"
 #include "ui_MainWindow.h"
 
-#include <QComboBox>
 #include <QDateTime>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QHeaderView>
+#include <QImageReader>
 #include <QMessageBox>
-#include <QMetaObject>
 #include <QPushButton>
+#include <QSet>
 #include <QStandardPaths>
 #include <QTableWidget>
 #include <QTableWidgetItem>
-#include <QThread>
 
-#if defined(HAVE_QT_MULTIMEDIA) && QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-#include <QCameraDevice>
-#include <QMediaDevices>
-#elif defined(HAVE_QT_MULTIMEDIA)
-#include <QCameraInfo>
-#endif
+namespace
+{
+const QSet<QByteArray> kSupportedImageFormats = {
+    "png",
+    "jpg",
+    "jpeg",
+    "bmp",
+};
+
+constexpr int kMinImageWidth = 32;
+constexpr int kMinImageHeight = 32;
+constexpr int kMaxImageWidth = 8192;
+constexpr int kMaxImageHeight = 8192;
+}
 
 MainWindow::MainWindow(QWidget* parent)
     : QWidget(parent),
       ui_(new Ui::MainWindow),
-      videoDisplay_(nullptr),
-      videoThread_(new QThread(this)),
-      videoWorker_(new VideoStreamWorker),
+      imagePreview_(nullptr),
       serviceClient_(new AlgorithmServiceClient(this)),
       exportService_(new ResultExportService)
 {
-    qRegisterMetaType<CameraDevice>("CameraDevice");
     qRegisterMetaType<RecognitionRecord>("RecognitionRecord");
 
     ui_->setupUi(this);
     setupWindow();
-    setupVideoPipeline();
     connectSignals();
-    refreshCameraDevices();
-
-    serviceClient_->setEndpoint(QUrl("http://127.0.0.1:8000/api/v1/recognize"));
-    serviceClient_->setMockMode(true);
+    setServiceEndpoint(QUrl("http://127.0.0.1:8000/api/v1/recognize"));
 }
 
 MainWindow::~MainWindow()
 {
-    stopDetection();
-    videoThread_->quit();
-    videoThread_->wait(1000);
-    delete videoWorker_;
     delete exportService_;
     delete ui_;
 }
@@ -63,9 +58,9 @@ bool MainWindow::isDetectionRunning() const
     return detectionRunning_;
 }
 
-int MainWindow::cameraCount() const
+bool MainWindow::hasLoadedImage() const
 {
-    return cameraDevices_.size();
+    return !importedImage_.isNull() && !importedImagePath_.isEmpty();
 }
 
 int MainWindow::resultCount() const
@@ -78,14 +73,30 @@ QString MainWindow::latestPlateText() const
     return ui_->currentPlateValueLabel->text();
 }
 
-void MainWindow::submitFrameForRecognition(const QImage& frame, const QString& imageId)
+bool MainWindow::loadImageFromFile(const QString& filePath, QString* errorMessage)
 {
-    serviceClient_->submitFrame(frame, imageId);
+    QImage image;
+    if (!validateImportedImage(filePath, errorMessage, &image)) {
+        return false;
+    }
+
+    importedImagePath_ = filePath;
+    importedImageId_ = buildImageId(filePath);
+    importedImage_ = image;
+
+    imagePreview_->setImage(importedImage_);
+    ui_->sourceValueLabel->setText(importedImageId_);
+    ui_->statusValueLabel->setText(
+        tr("图片已就绪: %1 (%2x%3)")
+            .arg(QFileInfo(filePath).fileName())
+            .arg(importedImage_.width())
+            .arg(importedImage_.height()));
+    applyControlState(false);
+    return true;
 }
 
 void MainWindow::setServiceEndpoint(const QUrl& endpoint)
 {
-    serviceClient_->setMockMode(false);
     serviceClient_->setEndpoint(endpoint);
 }
 
@@ -95,48 +106,38 @@ void MainWindow::setupWindow()
     resize(1680, 960);
     setMinimumSize(1440, 810);
 
-    videoDisplay_ = new VideoDisplayWidget(ui_->videoSurfaceContainer);
-    ui_->videoSurfaceLayout->addWidget(videoDisplay_);
+    imagePreview_ = new ImagePreviewWidget(ui_->previewSurfaceContainer);
+    ui_->previewSurfaceLayout->addWidget(imagePreview_);
     ui_->contentLayout->setStretch(0, 3);
     ui_->contentLayout->setStretch(1, 1);
 
-    ui_->stopButton->setEnabled(false);
     ui_->resultTableWidget->horizontalHeader()->setStretchLastSection(true);
     ui_->resultTableWidget->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     ui_->resultTableWidget->verticalHeader()->setVisible(false);
     ui_->resultTableWidget->setRowCount(0);
-}
 
-void MainWindow::setupVideoPipeline()
-{
-    videoWorker_->moveToThread(videoThread_);
-    videoThread_->start();
-
-    connect(videoWorker_, &VideoStreamWorker::frameReady, this, &MainWindow::handleFrameReady);
-    connect(videoWorker_, &VideoStreamWorker::streamStateChanged, this, [this](bool running, const QString& message) {
-        if (detectionRunning_ || !running) {
-            ui_->statusValueLabel->setText(message);
-        }
-    });
+    ui_->statusValueLabel->setText(tr("待导入图片"));
+    ui_->backendStatusValueLabel->setText(tr("待连接"));
+    ui_->sourceValueLabel->setText("--");
+    applyControlState(false);
 }
 
 void MainWindow::connectSignals()
 {
     connect(ui_->uploadButton, &QPushButton::clicked, this, &MainWindow::importImage);
     connect(ui_->startButton, &QPushButton::clicked, this, &MainWindow::startDetection);
-    connect(ui_->stopButton, &QPushButton::clicked, this, &MainWindow::stopDetection);
     connect(ui_->exportButton, &QPushButton::clicked, this, &MainWindow::exportResults);
-    connect(ui_->cameraComboBox, qOverload<int>(&QComboBox::currentIndexChanged), this, &MainWindow::handleCameraSelectionChanged);
     connect(serviceClient_, &AlgorithmServiceClient::recognitionReady, this, &MainWindow::handleRecognitionReady);
     connect(serviceClient_, &AlgorithmServiceClient::serviceStateChanged, this, &MainWindow::handleServiceStateChanged);
+    connect(serviceClient_, &AlgorithmServiceClient::requestFailed, this, &MainWindow::handleDetectionFailed);
 }
 
 void MainWindow::applyControlState(bool running)
 {
-    ui_->startButton->setEnabled(!running);
-    ui_->stopButton->setEnabled(running);
-    ui_->cameraComboBox->setEnabled(!running || cameraDevices_.size() > 1);
-    ui_->statusValueLabel->setText(running ? tr("视频流启动中") : tr("待机"));
+    detectionRunning_ = running;
+    ui_->uploadButton->setEnabled(!running);
+    ui_->startButton->setEnabled(!running && hasLoadedImage());
+    ui_->exportButton->setEnabled(!running);
 }
 
 void MainWindow::refreshResultPanel(const RecognitionRecord& record)
@@ -156,37 +157,69 @@ void MainWindow::appendHistoryRow(const RecognitionRecord& record)
     ui_->resultTableWidget->setItem(0, 3, new QTableWidgetItem(record.imageId));
 }
 
-QVector<CameraDevice> MainWindow::enumerateCameras() const
+bool MainWindow::validateImportedImage(const QString& filePath, QString* errorMessage, QImage* image) const
 {
-    QVector<CameraDevice> devices;
-
-#if defined(HAVE_QT_MULTIMEDIA) && QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    const QList<QCameraDevice> cameras = QMediaDevices::videoInputs();
-    for (const QCameraDevice& camera : cameras) {
-        devices.push_back(CameraDevice {camera.description(), QString::fromUtf8(camera.id()), false});
-    }
-#elif defined(HAVE_QT_MULTIMEDIA)
-    const QList<QCameraInfo> cameras = QCameraInfo::availableCameras();
-    for (const QCameraInfo& camera : cameras) {
-        devices.push_back(CameraDevice {camera.description(), camera.deviceName(), false});
-    }
-#endif
-
-    if (devices.isEmpty()) {
-        devices.push_back(CameraDevice {tr("Demo Camera"), QStringLiteral("demo-camera-0"), true});
+    const QFileInfo fileInfo(filePath);
+    if (!fileInfo.exists() || !fileInfo.isFile()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = tr("所选路径不是有效图片文件。");
+        }
+        return false;
     }
 
-    return devices;
+    if (fileInfo.size() <= 0) {
+        if (errorMessage != nullptr) {
+            *errorMessage = tr("图片文件为空，无法检测。");
+        }
+        return false;
+    }
+
+    QImageReader reader(filePath);
+    reader.setAutoTransform(true);
+    const QByteArray format = reader.format().toLower();
+    if (!reader.canRead() || !kSupportedImageFormats.contains(format)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = tr("仅支持 PNG/JPG/JPEG/BMP 格式的静态图片。");
+        }
+        return false;
+    }
+
+    const QSize imageSize = reader.size();
+    if (!imageSize.isValid()
+        || imageSize.width() < kMinImageWidth
+        || imageSize.height() < kMinImageHeight
+        || imageSize.width() > kMaxImageWidth
+        || imageSize.height() > kMaxImageHeight) {
+        if (errorMessage != nullptr) {
+            *errorMessage =
+                tr("图片尺寸不合法，需介于 %1x%2 和 %3x%4 之间。")
+                    .arg(kMinImageWidth)
+                    .arg(kMinImageHeight)
+                    .arg(kMaxImageWidth)
+                    .arg(kMaxImageHeight);
+        }
+        return false;
+    }
+
+    const QImage loadedImage = reader.read();
+    if (loadedImage.isNull()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = tr("图片内容不完整或已损坏，无法解析。");
+        }
+        return false;
+    }
+
+    if (image != nullptr) {
+        *image = loadedImage;
+    }
+    return true;
 }
 
-CameraDevice MainWindow::currentCameraDevice() const
+QString MainWindow::buildImageId(const QString& filePath) const
 {
-    const int index = ui_->cameraComboBox->currentIndex();
-    if (index >= 0 && index < cameraDevices_.size()) {
-        return cameraDevices_.at(index);
-    }
-
-    return CameraDevice {tr("Demo Camera"), QStringLiteral("demo-camera-0"), true};
+    return QString("image-%1-%2")
+        .arg(QDateTime::currentDateTimeUtc().toString("yyyyMMddHHmmsszzz"))
+        .arg(QFileInfo(filePath).completeBaseName());
 }
 
 QString MainWindow::formatConfidence(double confidence)
@@ -194,45 +227,34 @@ QString MainWindow::formatConfidence(double confidence)
     return QString("%1%").arg(QString::number(confidence * 100.0, 'f', 1));
 }
 
-void MainWindow::refreshCameraDevices()
-{
-    cameraDevices_ = enumerateCameras();
-
-    ui_->cameraComboBox->blockSignals(true);
-    ui_->cameraComboBox->clear();
-    for (const CameraDevice& device : cameraDevices_) {
-        ui_->cameraComboBox->addItem(device.displayName, device.deviceId);
-    }
-    ui_->cameraComboBox->blockSignals(false);
-
-    if (!cameraDevices_.isEmpty()) {
-        ui_->sourceValueLabel->setText("--");
-    }
-}
-
 void MainWindow::startDetection()
 {
-    detectionRunning_ = true;
-    submissionThrottle_.invalidate();
-    applyControlState(true);
-
-    const CameraDevice device = currentCameraDevice();
-    ui_->sourceValueLabel->setText("--");
-    QMetaObject::invokeMethod(
-        videoWorker_,
-        "startStream",
-        Qt::QueuedConnection,
-        Q_ARG(CameraDevice, device));
-}
-
-void MainWindow::stopDetection()
-{
-    detectionRunning_ = false;
-    applyControlState(false);
-
-    if (videoWorker_ != nullptr) {
-        QMetaObject::invokeMethod(videoWorker_, "stopStream", Qt::QueuedConnection);
+    QString errorMessage;
+    QImage validatedImage;
+    if (!validateImportedImage(importedImagePath_, &errorMessage, &validatedImage)) {
+        importedImage_ = QImage();
+        importedImagePath_.clear();
+        importedImageId_.clear();
+        imagePreview_->setImage(QImage());
+        ui_->statusValueLabel->setText(tr("待导入图片"));
+        ui_->sourceValueLabel->setText("--");
+        applyControlState(false);
+        QMessageBox::warning(this, tr("图片校验失败"), errorMessage);
+        return;
     }
+
+    importedImage_ = validatedImage;
+    imagePreview_->setImage(importedImage_);
+    importedImageId_ = buildImageId(importedImagePath_);
+    ui_->sourceValueLabel->setText(importedImageId_);
+
+    if (!serviceClient_->submitImage(importedImagePath_, importedImageId_)) {
+        applyControlState(false);
+        return;
+    }
+
+    ui_->statusValueLabel->setText(tr("正在上传图片并等待检测结果"));
+    applyControlState(true);
 }
 
 void MainWindow::importImage()
@@ -247,19 +269,10 @@ void MainWindow::importImage()
         return;
     }
 
-    QImage image(filePath);
-    if (image.isNull()) {
-        QMessageBox::warning(this, tr("图像加载失败"), tr("无法读取所选图片。"));
-        return;
+    QString errorMessage;
+    if (!loadImageFromFile(filePath, &errorMessage)) {
+        QMessageBox::warning(this, tr("图像加载失败"), errorMessage);
     }
-
-    latestFrame_ = image;
-    videoDisplay_->setFrame(image);
-    ui_->statusValueLabel->setText(tr("已载入图像"));
-    const QString imageId = QString("import-%1-%2")
-                                .arg(QDateTime::currentDateTimeUtc().toString("yyyyMMddHHmmsszzz"))
-                                .arg(QFileInfo(filePath).fileName());
-    submitFrameForRecognition(image, imageId);
 }
 
 void MainWindow::exportResults()
@@ -288,46 +301,23 @@ void MainWindow::exportResults()
     QMessageBox::information(this, tr("导出成功"), tr("识别结果已导出到:\n%1").arg(filePath));
 }
 
-void MainWindow::handleCameraSelectionChanged(int index)
-{
-    if (index < 0 || index >= cameraDevices_.size()) {
-        return;
-    }
-
-    ui_->sourceValueLabel->setText("--");
-    if (detectionRunning_) {
-        QMetaObject::invokeMethod(
-            videoWorker_,
-            "startStream",
-            Qt::QueuedConnection,
-            Q_ARG(CameraDevice, cameraDevices_.at(index)));
-    }
-}
-
-void MainWindow::handleFrameReady(const QImage& frame, double fps, const QString& imageId)
-{
-    latestFrame_ = frame;
-    videoDisplay_->setFrame(frame);
-    ui_->fpsValueLabel->setText(QString("%1 fps").arg(QString::number(fps, 'f', 1)));
-
-    if (!detectionRunning_) {
-        return;
-    }
-
-    if (!submissionThrottle_.isValid() || submissionThrottle_.elapsed() >= 200) {
-        submitFrameForRecognition(frame, imageId);
-        submissionThrottle_.restart();
-    }
-}
-
 void MainWindow::handleRecognitionReady(const RecognitionRecord& record)
 {
     recognitionHistory_.prepend(record);
     refreshResultPanel(record);
     appendHistoryRow(record);
+    ui_->statusValueLabel->setText(tr("检测完成"));
+    applyControlState(false);
 }
 
 void MainWindow::handleServiceStateChanged(const QString& statusText)
 {
     ui_->backendStatusValueLabel->setText(statusText);
+}
+
+void MainWindow::handleDetectionFailed(const QString& errorMessage)
+{
+    ui_->statusValueLabel->setText(tr("检测失败"));
+    applyControlState(false);
+    QMessageBox::warning(this, tr("后端检测失败"), errorMessage);
 }
