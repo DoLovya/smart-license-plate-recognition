@@ -356,7 +356,15 @@ void MainWindow::applyTheme(const QString& themeId, bool persist)
     }
 
     if (auto* application = qobject_cast<QApplication*>(QApplication::instance()); application != nullptr) {
+        application->setProperty("themeId", themeId);
         application->setStyleSheet(styleSheet);
+    }
+
+    if (imagePreview_ != nullptr) {
+        imagePreview_->update();
+    }
+    if (imageGalleryWidget_ != nullptr) {
+        imageGalleryWidget_->update();
     }
 
     if (persist) {

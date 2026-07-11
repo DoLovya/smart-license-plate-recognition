@@ -1,5 +1,6 @@
 #include "widgets/ImagePreviewWidget.h"
 
+#include <QApplication>
 #include <QFontMetrics>
 #include <QPainter>
 #include <QPainterPath>
@@ -13,6 +14,36 @@ constexpr qreal kAspectRatio = 16.0 / 9.0;
 constexpr int kOverlayPaddingX = 10;
 constexpr int kOverlayPaddingY = 6;
 constexpr int kOverlayRadius = 8;
+
+bool isLightThemeActive()
+{
+    return qApp != nullptr && qApp->property("themeId").toString() == QStringLiteral("enterprise-light");
+}
+
+QColor previewCanvasColor()
+{
+    return isLightThemeActive() ? QColor("#edf2f7") : QColor("#07101c");
+}
+
+QColor previewSurfaceColor()
+{
+    return isLightThemeActive() ? QColor("#f8fbff") : QColor("#0d1828");
+}
+
+QColor previewPlaceholderColor()
+{
+    return isLightThemeActive() ? QColor("#64748b") : QColor("#5bc7ff");
+}
+
+QColor overlayStrokeColor()
+{
+    return isLightThemeActive() ? QColor("#2563eb") : QColor("#20d4ff");
+}
+
+QColor overlayLabelBackgroundColor()
+{
+    return isLightThemeActive() ? QColor(15, 23, 42, 220) : QColor(6, 18, 32, 220);
+}
 }
 
 ImagePreviewWidget::ImagePreviewWidget(QWidget* parent) : QFrame(parent)
@@ -61,17 +92,17 @@ void ImagePreviewWidget::paintEvent(QPaintEvent* event)
 
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.fillRect(rect(), QColor("#07101c"));
+    painter.fillRect(rect(), previewCanvasColor());
 
     const QRect target = imageRect();
     QPainterPath clipPath;
     clipPath.addRoundedRect(target, 18, 18);
-    painter.fillPath(clipPath, QColor("#0d1828"));
+    painter.fillPath(clipPath, previewSurfaceColor());
     painter.setClipPath(clipPath);
 
     if (currentImage_.isNull()) {
-        painter.fillRect(target, QColor("#0d1828"));
-        painter.setPen(QColor("#5bc7ff"));
+        painter.fillRect(target, previewSurfaceColor());
+        painter.setPen(previewPlaceholderColor());
         painter.drawText(target, Qt::AlignCenter, tr("请先导入静态图片"));
         return;
     }
@@ -107,7 +138,7 @@ void ImagePreviewWidget::paintEvent(QPaintEvent* event)
             qMax<qreal>(2.0, (box.x2 - box.x1) * scaleX),
             qMax<qreal>(2.0, (box.y2 - box.y1) * scaleY));
 
-        painter.setPen(QPen(QColor("#20d4ff"), 3));
+        painter.setPen(QPen(overlayStrokeColor(), 3));
         painter.setBrush(Qt::NoBrush);
         painter.drawRoundedRect(mappedRect, 8, 8);
 
@@ -131,7 +162,7 @@ void ImagePreviewWidget::paintEvent(QPaintEvent* event)
 
         const QRect labelRect(labelLeft, labelTop, labelWidth, labelHeight);
         painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(6, 18, 32, 220));
+        painter.setBrush(overlayLabelBackgroundColor());
         painter.drawRoundedRect(labelRect, kOverlayRadius, kOverlayRadius);
         painter.setPen(QColor("#ffffff"));
         painter.drawText(labelRect, Qt::AlignCenter, label);

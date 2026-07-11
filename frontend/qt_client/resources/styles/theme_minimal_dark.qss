@@ -14,10 +14,24 @@ QFrame#controlPanelFrame,
 QFrame#resultPanelFrame,
 QFrame#latestResultFrame,
 QFrame#previewSurfaceContainer,
-QFrame#themeSwitcherFrame {
+QFrame#themeSwitcherFrame,
+QFrame#imageListFrame,
+QFrame#imageGalleryWidget {
     background: #11161d;
     border: 1px solid #1f2937;
     border-radius: 12px;
+}
+
+QFrame#imageGalleryWidget {
+    qproperty-cardFillColor: #121821;
+    qproperty-selectedCardFillColor: #18212d;
+    qproperty-cardBorderColor: #273244;
+    qproperty-selectedCardBorderColor: #14b8a6;
+    qproperty-cardTextColor: #d1d5db;
+    qproperty-selectedCardTextColor: #ecfeff;
+    qproperty-placeholderFillColor: #0f141b;
+    qproperty-placeholderBorderColor: #273244;
+    qproperty-placeholderTextColor: #9ca3af;
 }
 
 QFrame#controlPanelFrame,
@@ -34,7 +48,8 @@ QLabel#titleLabel {
 QLabel#subtitleLabel,
 QLabel#previewSectionHintLabel,
 QLabel#resultSectionHintLabel,
-QLabel#themeLabel {
+QLabel#themeLabel,
+QLabel#imageGalleryTitleLabel {
     font-size: 13px;
     color: #9ca3af;
 }
@@ -48,6 +63,9 @@ QLabel#historyTitleLabel {
 }
 
 QLabel#statusCaptionLabel,
+QLabel#sourceModeCaptionLabel,
+QLabel#directoryCaptionLabel,
+QLabel#batchProgressCaptionLabel,
 QLabel#plateTitleLabel,
 QLabel#confidenceTitleLabel,
 QLabel#timestampTitleLabel,
@@ -70,7 +88,10 @@ QLabel#currentPlateValueLabel {
 
 QLabel#confidenceValueLabel,
 QLabel#timestampValueLabel,
-QLabel#sourceValueLabel {
+QLabel#sourceValueLabel,
+QLabel#sourceModeValueLabel,
+QLabel#directoryValueLabel,
+QLabel#batchProgressValueLabel {
     font-size: 15px;
     font-weight: 600;
     color: #e5e7eb;
@@ -166,4 +187,16 @@ QTableCornerButton::section {
     background: #121821;
     border: none;
     border-bottom: 1px solid #1f2937;
+}
+
+QListView#imageListView {
+    background: transparent;
+    border: none;
+    outline: none;
+    padding: 2px;
+}
+
+QListView#imageListView::item {
+    background: transparent;
+    border: none;
 }

@@ -2,14 +2,10 @@
 
 #include <QAbstractItemView>
 #include <QAbstractListModel>
-#include <QApplication>
-#include <QElapsedTimer>
-#include <QFileInfo>
 #include <QImageReader>
 #include <QLabel>
 #include <QListView>
 #include <QPainter>
-#include <QPointer>
 #include <QSignalBlocker>
 #include <QStyledItemDelegate>
 #include <QTimer>
@@ -133,6 +129,17 @@ public:
         }
     }
 
+    void setPlaceholderColors(const QColor& fill, const QColor& border, const QColor& text)
+    {
+        placeholderFillColor_ = fill;
+        placeholderBorderColor_ = border;
+        placeholderTextColor_ = text;
+        placeholderThumbnail_ = QPixmap();
+        if (!items_.isEmpty()) {
+            emit dataChanged(index(0, 0), index(items_.size() - 1, 0), {ThumbnailPixmapRole});
+        }
+    }
+
 private:
     int rowForFilePath(const QString& filePath) const
     {
@@ -189,31 +196,39 @@ private:
         }
     }
 
-    static QPixmap placeholderThumbnail()
+    QPixmap placeholderThumbnail() const
     {
-        static QPixmap placeholder;
-        if (placeholder.isNull()) {
-            placeholder = QPixmap(kThumbnailIconSize, kThumbnailIconSize);
-            placeholder.fill(QColor("#132235"));
+        if (placeholderThumbnail_.isNull()) {
+            placeholderThumbnail_ = QPixmap(kThumbnailIconSize, kThumbnailIconSize);
+            placeholderThumbnail_.fill(placeholderFillColor_);
 
-            QPainter painter(&placeholder);
+            QPainter painter(&placeholderThumbnail_);
             painter.setRenderHint(QPainter::Antialiasing, true);
-            painter.setPen(QColor("#5bc7ff"));
-            painter.drawRoundedRect(placeholder.rect().adjusted(1, 1, -2, -2), 12, 12);
-            painter.drawText(placeholder.rect(), Qt::AlignCenter, QObject::tr("加载中"));
+            painter.setPen(placeholderBorderColor_);
+            painter.drawRoundedRect(placeholderThumbnail_.rect().adjusted(1, 1, -2, -2), 12, 12);
+            painter.setPen(placeholderTextColor_);
+            painter.drawText(placeholderThumbnail_.rect(), Qt::AlignCenter, QObject::tr("加载中"));
         }
-        return placeholder;
+        return placeholderThumbnail_;
     }
 
     QVector<ImageGalleryItemState> items_;
     QVector<int> thumbnailQueue_;
     QTimer thumbnailLoadTimer_;
+    QColor placeholderFillColor_ = QColor("#132235");
+    QColor placeholderBorderColor_ = QColor("#5bc7ff");
+    QColor placeholderTextColor_ = QColor("#d7e3ee");
+    mutable QPixmap placeholderThumbnail_;
 };
 
 class ImageGalleryDelegate final : public QStyledItemDelegate
 {
 public:
-    explicit ImageGalleryDelegate(QObject* parent = nullptr) : QStyledItemDelegate(parent) {}
+    explicit ImageGalleryDelegate(const ImageGalleryWidget* owner, QObject* parent = nullptr)
+        : QStyledItemDelegate(parent),
+          owner_(owner)
+    {
+    }
 
     void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override
     {
@@ -227,8 +242,8 @@ public:
 
         QRect cardRect = option.rect.adjusted(4, 4, -4, -4);
         const bool selected = (option.state & QStyle::State_Selected) != 0;
-        painter->setPen(selected ? QColor("#5bc7ff") : QColor("#24374a"));
-        painter->setBrush(selected ? QColor("#0f2235") : QColor("#0b1827"));
+        painter->setPen(selected ? owner_->selectedCardBorderColor() : owner_->cardBorderColor());
+        painter->setBrush(selected ? owner_->selectedCardFillColor() : owner_->cardFillColor());
         painter->drawRoundedRect(cardRect, 12, 12);
 
         const QRect thumbnailRect(cardRect.left() + 10, cardRect.top() + 10, kThumbnailIconSize, kThumbnailIconSize);
@@ -244,7 +259,7 @@ public:
         }
 
         QRect textRect = cardRect.adjusted(8, kThumbnailIconSize + 18, -8, -8);
-        painter->setPen(selected ? QColor("#ffffff") : QColor("#d7e3ee"));
+        painter->setPen(selected ? owner_->selectedCardTextColor() : owner_->cardTextColor());
         painter->drawText(textRect, Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap, index.data(Qt::DisplayRole).toString());
 
         painter->restore();
@@ -256,6 +271,9 @@ public:
         Q_UNUSED(index);
         return QSize(kThumbnailGridWidth, kThumbnailGridHeight);
     }
+
+private:
+    const ImageGalleryWidget* owner_ = nullptr;
 };
 }
 
@@ -289,8 +307,10 @@ ImageGalleryWidget::ImageGalleryWidget(QWidget* parent) : QFrame(parent)
     listView_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     listView_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     listView_->setModel(new ImageGalleryModel(listView_));
-    listView_->setItemDelegate(new ImageGalleryDelegate(listView_));
+    listView_->setItemDelegate(new ImageGalleryDelegate(this, listView_));
     rootLayout->addWidget(listView_);
+
+    refreshGalleryColors();
 
     connect(
         listView_->selectionModel(),
@@ -339,6 +359,132 @@ int ImageGalleryWidget::imageCount() const
     return listView_->model() == nullptr ? 0 : listView_->model()->rowCount();
 }
 
+QColor ImageGalleryWidget::cardFillColor() const
+{
+    return cardFillColor_;
+}
+
+void ImageGalleryWidget::setCardFillColor(const QColor& color)
+{
+    if (cardFillColor_ == color) {
+        return;
+    }
+    cardFillColor_ = color;
+    refreshGalleryColors();
+}
+
+QColor ImageGalleryWidget::selectedCardFillColor() const
+{
+    return selectedCardFillColor_;
+}
+
+void ImageGalleryWidget::setSelectedCardFillColor(const QColor& color)
+{
+    if (selectedCardFillColor_ == color) {
+        return;
+    }
+    selectedCardFillColor_ = color;
+    refreshGalleryColors();
+}
+
+QColor ImageGalleryWidget::cardBorderColor() const
+{
+    return cardBorderColor_;
+}
+
+void ImageGalleryWidget::setCardBorderColor(const QColor& color)
+{
+    if (cardBorderColor_ == color) {
+        return;
+    }
+    cardBorderColor_ = color;
+    refreshGalleryColors();
+}
+
+QColor ImageGalleryWidget::selectedCardBorderColor() const
+{
+    return selectedCardBorderColor_;
+}
+
+void ImageGalleryWidget::setSelectedCardBorderColor(const QColor& color)
+{
+    if (selectedCardBorderColor_ == color) {
+        return;
+    }
+    selectedCardBorderColor_ = color;
+    refreshGalleryColors();
+}
+
+QColor ImageGalleryWidget::cardTextColor() const
+{
+    return cardTextColor_;
+}
+
+void ImageGalleryWidget::setCardTextColor(const QColor& color)
+{
+    if (cardTextColor_ == color) {
+        return;
+    }
+    cardTextColor_ = color;
+    refreshGalleryColors();
+}
+
+QColor ImageGalleryWidget::selectedCardTextColor() const
+{
+    return selectedCardTextColor_;
+}
+
+void ImageGalleryWidget::setSelectedCardTextColor(const QColor& color)
+{
+    if (selectedCardTextColor_ == color) {
+        return;
+    }
+    selectedCardTextColor_ = color;
+    refreshGalleryColors();
+}
+
+QColor ImageGalleryWidget::placeholderFillColor() const
+{
+    return placeholderFillColor_;
+}
+
+void ImageGalleryWidget::setPlaceholderFillColor(const QColor& color)
+{
+    if (placeholderFillColor_ == color) {
+        return;
+    }
+    placeholderFillColor_ = color;
+    refreshGalleryColors();
+}
+
+QColor ImageGalleryWidget::placeholderBorderColor() const
+{
+    return placeholderBorderColor_;
+}
+
+void ImageGalleryWidget::setPlaceholderBorderColor(const QColor& color)
+{
+    if (placeholderBorderColor_ == color) {
+        return;
+    }
+    placeholderBorderColor_ = color;
+    refreshGalleryColors();
+}
+
+QColor ImageGalleryWidget::placeholderTextColor() const
+{
+    return placeholderTextColor_;
+}
+
+void ImageGalleryWidget::setPlaceholderTextColor(const QColor& color)
+{
+    if (placeholderTextColor_ == color) {
+        return;
+    }
+    placeholderTextColor_ = color;
+    refreshGalleryColors();
+}
+
 void ImageGalleryWidget::handleCurrentIndexChanged(const QModelIndex& current, const QModelIndex& previous)
 {
     Q_UNUSED(previous);
@@ -348,4 +494,16 @@ void ImageGalleryWidget::handleCurrentIndexChanged(const QModelIndex& current, c
     }
 
     emit imageSelected(current.data(FilePathRole).toString());
+}
+
+void ImageGalleryWidget::refreshGalleryColors()
+{
+    auto* model = static_cast<ImageGalleryModel*>(listView_->model());
+    if (model != nullptr) {
+        model->setPlaceholderColors(placeholderFillColor_, placeholderBorderColor_, placeholderTextColor_);
+    }
+
+    if (listView_ != nullptr && listView_->viewport() != nullptr) {
+        listView_->viewport()->update();
+    }
 }
