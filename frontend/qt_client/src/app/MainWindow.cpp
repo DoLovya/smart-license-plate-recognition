@@ -2,6 +2,7 @@
 
 #include "api/AlgorithmServiceClient.h"
 #include "services/ResultExportService.h"
+#include "widgets/ImageGalleryWidget.h"
 #include "widgets/ImagePreviewWidget.h"
 #include "ui_MainWindow.h"
 
@@ -15,16 +16,12 @@
 #include <QFileInfo>
 #include <QHeaderView>
 #include <QImageReader>
-#include <QListView>
 #include <QLabel>
-#include <QListWidget>
-#include <QListWidgetItem>
 #include <QMenuBar>
 #include <QMessageBox>
-#include <QPixmap>
 #include <QPushButton>
+#include <QRandomGenerator>
 #include <QSettings>
-#include <QSignalBlocker>
 #include <QSizePolicy>
 #include <QSet>
 #include <QStandardPaths>
@@ -49,9 +46,6 @@ constexpr int kPreviewPaneMinWidth = 680;
 constexpr int kThumbnailPaneWidth = 190;
 constexpr int kResultPaneMinWidth = 320;
 constexpr int kResultPaneMaxWidth = 460;
-constexpr int kThumbnailIconSize = 120;
-constexpr int kThumbnailGridWidth = 148;
-constexpr int kThumbnailGridHeight = 156;
 constexpr char kThemeSettingsKey[] = "ui/theme";
 constexpr char kImageDirectorySettingsKey[] = "input/image_directory";
 
@@ -245,23 +239,17 @@ void MainWindow::setupWindow()
     imagePreview_ = new ImagePreviewWidget(ui_->previewSurfaceContainer);
     imagePreview_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     ui_->previewSurfaceLayout->addWidget(imagePreview_);
+
+    imageGalleryWidget_ = new ImageGalleryWidget(ui_->imageListFrame);
+    imageGalleryWidget_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+    ui_->imageListFrame->layout()->addWidget(imageGalleryWidget_);
+
     ui_->contentLayout->setStretch(0, 5);
     ui_->contentLayout->setStretch(1, 0);
     ui_->contentLayout->setStretch(2, 2);
     ui_->previewCardFrame->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
     ui_->imageListFrame->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
     ui_->resultPanelFrame->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
-
-    ui_->imageListWidget->setViewMode(QListView::IconMode);
-    ui_->imageListWidget->setFlow(QListView::TopToBottom);
-    ui_->imageListWidget->setMovement(QListView::Static);
-    ui_->imageListWidget->setResizeMode(QListView::Adjust);
-    ui_->imageListWidget->setWrapping(false);
-    ui_->imageListWidget->setSpacing(8);
-    ui_->imageListWidget->setIconSize(QSize(kThumbnailIconSize, kThumbnailIconSize));
-    ui_->imageListWidget->setGridSize(QSize(kThumbnailGridWidth, kThumbnailGridHeight));
-    ui_->imageListWidget->setWordWrap(true);
-    ui_->imageListWidget->setUniformItemSizes(true);
 
     ui_->resultTableWidget->horizontalHeader()->setStretchLastSection(true);
     ui_->resultTableWidget->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
@@ -339,11 +327,7 @@ void MainWindow::connectSignals()
     connect(ui_->startButton, &QPushButton::clicked, this, &MainWindow::startDetection);
     connect(ui_->stopButton, &QPushButton::clicked, this, &MainWindow::stopDetection);
     connect(ui_->exportButton, &QPushButton::clicked, this, &MainWindow::exportResults);
-    connect(
-        ui_->imageListWidget,
-        &QListWidget::currentItemChanged,
-        this,
-        &MainWindow::handleImageListSelectionChanged);
+    connect(imageGalleryWidget_, &ImageGalleryWidget::imageSelected, this, &MainWindow::handleImageListSelectionChanged);
     connect(themeActionGroup_, &QActionGroup::triggered, this, &MainWindow::handleThemeActionTriggered);
     connect(serviceClient_, &AlgorithmServiceClient::recognitionReady, this, &MainWindow::handleRecognitionReady);
     connect(serviceClient_, &AlgorithmServiceClient::serviceStateChanged, this, &MainWindow::handleServiceStateChanged);
@@ -361,7 +345,7 @@ void MainWindow::applyControlState(bool running)
     ui_->startButton->setEnabled(!running && readyToStart);
     ui_->stopButton->setEnabled(running);
     ui_->exportButton->setEnabled(!running);
-    ui_->imageListWidget->setEnabled(!running && ui_->imageListWidget->count() > 0);
+    imageGalleryWidget_->setGalleryEnabled(!running && imageGalleryWidget_->imageCount() > 0);
 }
 
 void MainWindow::applyTheme(const QString& themeId, bool persist)
@@ -455,6 +439,7 @@ void MainWindow::clearCurrentImage()
     importedImageId_.clear();
     importedImage_ = QImage();
     imagePreview_->setImage(QImage());
+    imagePreview_->setRecognitionRecord(nullptr);
     resetCurrentResultPanel();
 }
 
@@ -474,7 +459,6 @@ void MainWindow::clearDirectorySelection()
     configuredDirectoryImages_.clear();
     recognitionRecordsByPath_.clear();
     imageIdsByPath_.clear();
-    thumbnailIconsByPath_.clear();
     pendingRecognitionImagePath_.clear();
     activeDirectoryIndex_ = -1;
     directorySuccessCount_ = 0;
@@ -505,62 +489,55 @@ QStringList MainWindow::collectDirectoryImages(const QString& directoryPath) con
 
 void MainWindow::populateImageList(const QStringList& imagePaths)
 {
-    const QSignalBlocker blocker(ui_->imageListWidget);
-    ui_->imageListWidget->clear();
-
+    QVector<ImageGalleryEntry> entries;
+    entries.reserve(imagePaths.size());
     for (const QString& imagePath : imagePaths) {
-        auto* item = new QListWidgetItem(buildImageListText(imagePath), ui_->imageListWidget);
-        item->setData(Qt::UserRole, imagePath);
-        item->setIcon(buildThumbnailIcon(imagePath));
-        item->setTextAlignment(Qt::AlignHCenter);
-        item->setToolTip(QDir::toNativeSeparators(imagePath));
+        entries.push_back(ImageGalleryEntry {
+            imagePath,
+            buildImageListText(imagePath),
+            QDir::toNativeSeparators(imagePath),
+        });
     }
-
-    ui_->imageListWidget->setEnabled(!detectionRunning_ && ui_->imageListWidget->count() > 0);
+    imageGalleryWidget_->setEntries(entries);
+    imageGalleryWidget_->setGalleryEnabled(!detectionRunning_ && imageGalleryWidget_->imageCount() > 0);
 }
 
 void MainWindow::selectImageListItem(const QString& filePath)
 {
-    const QSignalBlocker blocker(ui_->imageListWidget);
-    for (int row = 0; row < ui_->imageListWidget->count(); ++row) {
-        QListWidgetItem* item = ui_->imageListWidget->item(row);
-        if (item != nullptr && item->data(Qt::UserRole).toString() == filePath) {
-            ui_->imageListWidget->setCurrentItem(item);
-            return;
-        }
-    }
+    imageGalleryWidget_->setCurrentImage(filePath);
 }
 
 void MainWindow::updateImageListItem(const QString& filePath)
 {
-    for (int row = 0; row < ui_->imageListWidget->count(); ++row) {
-        QListWidgetItem* item = ui_->imageListWidget->item(row);
-        if (item != nullptr && item->data(Qt::UserRole).toString() == filePath) {
-            item->setText(buildImageListText(filePath));
-            item->setIcon(buildThumbnailIcon(filePath));
-            const QString tooltip =
-                recognitionRecordsByPath_.contains(filePath)
-                    ? tr("%1\n识别结果: %2")
-                          .arg(QDir::toNativeSeparators(filePath), recognitionRecordsByPath_.value(filePath).plateText)
-                    : QDir::toNativeSeparators(filePath);
-            item->setToolTip(tooltip);
-            return;
-        }
-    }
+    const QString tooltip =
+        recognitionRecordsByPath_.contains(filePath)
+            ? tr("%1\n识别结果: %2")
+                  .arg(QDir::toNativeSeparators(filePath), recognitionRecordsByPath_.value(filePath).plateText)
+            : QDir::toNativeSeparators(filePath);
+
+    imageGalleryWidget_->updateEntry(ImageGalleryEntry {
+        filePath,
+        buildImageListText(filePath),
+        tooltip,
+    });
 }
 
 void MainWindow::syncResultPanelForCurrentImage()
 {
     if (importedImagePath_.isEmpty()) {
+        imagePreview_->setRecognitionRecord(nullptr);
         resetCurrentResultPanel();
         return;
     }
 
     if (recognitionRecordsByPath_.contains(importedImagePath_)) {
-        refreshResultPanel(recognitionRecordsByPath_.value(importedImagePath_));
+        const RecognitionRecord& record = recognitionRecordsByPath_.value(importedImagePath_);
+        imagePreview_->setRecognitionRecord(&record);
+        refreshResultPanel(record);
         return;
     }
 
+    imagePreview_->setRecognitionRecord(nullptr);
     ui_->currentPlateValueLabel->setText("--");
     ui_->confidenceValueLabel->setText("--");
     ui_->timestampValueLabel->setText("--");
@@ -579,35 +556,9 @@ QString MainWindow::ensureImageId(const QString& filePath)
     return imageId;
 }
 
-QIcon MainWindow::buildThumbnailIcon(const QString& filePath)
+QString MainWindow::buildImageListText(const QString& filePath)
 {
-    const auto it = thumbnailIconsByPath_.constFind(filePath);
-    if (it != thumbnailIconsByPath_.constEnd()) {
-        return it.value();
-    }
-
-    QImageReader reader(filePath);
-    reader.setAutoTransform(true);
-    const QImage image = reader.read();
-    if (image.isNull()) {
-        return QIcon();
-    }
-
-    const QPixmap pixmap = QPixmap::fromImage(
-        image.scaled(kThumbnailIconSize, kThumbnailIconSize, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    const QIcon icon(pixmap);
-    thumbnailIconsByPath_.insert(filePath, icon);
-    return icon;
-}
-
-QString MainWindow::buildImageListText(const QString& filePath) const
-{
-    const QString baseName = QFileInfo(filePath).completeBaseName();
-    if (baseName.size() <= 18) {
-        return baseName;
-    }
-
-    return tr("%1...%2").arg(baseName.left(8), baseName.right(7));
+    return ensureImageId(filePath);
 }
 
 bool MainWindow::previewFirstDirectoryImage(QString* errorMessage)
@@ -799,9 +750,16 @@ bool MainWindow::validateImportedImage(const QString& filePath, QString* errorMe
 
 QString MainWindow::buildImageId(const QString& filePath) const
 {
-    return QString("image-%1-%2")
-        .arg(QDateTime::currentDateTimeUtc().toString("yyyyMMddHHmmsszzz"))
-        .arg(QFileInfo(filePath).completeBaseName());
+    Q_UNUSED(filePath);
+
+    static constexpr char kIdAlphabet[] = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+    QString imageId = QStringLiteral("img_");
+    imageId.reserve(16);
+    for (int index = 0; index < 12; ++index) {
+        const int alphabetIndex = QRandomGenerator::global()->bounded(static_cast<int>(sizeof(kIdAlphabet) - 1));
+        imageId.append(QChar::fromLatin1(kIdAlphabet[alphabetIndex]));
+    }
+    return imageId;
 }
 
 QString MainWindow::formatConfidence(double confidence)
@@ -927,6 +885,7 @@ void MainWindow::handleRecognitionReady(const RecognitionRecord& record)
 
     recognitionHistory_.prepend(record);
     refreshResultPanel(record);
+    imagePreview_->setRecognitionRecord(&record);
     appendHistoryRow(record);
 
     if (inputMode_ == InputMode::ImageDirectory && detectionRunning_) {
@@ -999,15 +958,12 @@ void MainWindow::handleThemeActionTriggered()
     applyTheme(checkedAction->data().toString());
 }
 
-void MainWindow::handleImageListSelectionChanged(QListWidgetItem* current, QListWidgetItem* previous)
+void MainWindow::handleImageListSelectionChanged(const QString& filePath)
 {
-    Q_UNUSED(previous);
-
-    if (current == nullptr || detectionRunning_) {
+    if (detectionRunning_) {
         return;
     }
 
-    const QString filePath = current->data(Qt::UserRole).toString();
     if (filePath.isEmpty() || filePath == importedImagePath_) {
         return;
     }

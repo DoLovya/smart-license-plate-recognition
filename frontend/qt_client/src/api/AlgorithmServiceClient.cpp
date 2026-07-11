@@ -5,6 +5,7 @@
 #include <QFileInfo>
 #include <QHttpMultiPart>
 #include <QHttpPart>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMimeDatabase>
@@ -124,6 +125,22 @@ void AlgorithmServiceClient::handleReply(QNetworkReply* reply)
     record.plateText = root.value("plate_text").toString("PENDING");
     record.confidence = root.value("confidence").toDouble(0.0);
     record.imageId = root.value("image_id").toString(context.imageId);
+    const QJsonArray boxes = root.value("boxes").toArray();
+    record.boxes.reserve(boxes.size());
+    for (const QJsonValue& boxValue : boxes) {
+        if (!boxValue.isObject()) {
+            continue;
+        }
+
+        const QJsonObject boxObject = boxValue.toObject();
+        record.boxes.push_back(DetectionBox {
+            boxObject.value("x1").toInt(0),
+            boxObject.value("y1").toInt(0),
+            boxObject.value("x2").toInt(0),
+            boxObject.value("y2").toInt(0),
+            boxObject.value("confidence").toDouble(0.0),
+        });
+    }
 
     emit serviceStateChanged(tr("检测完成"));
     emit recognitionReady(record);

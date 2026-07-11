@@ -2,7 +2,6 @@
 #include <QFile>
 #include <QImage>
 #include <QLabel>
-#include <QListWidget>
 #include <QListView>
 #include <QMenu>
 #include <QPushButton>
@@ -16,6 +15,20 @@
 
 #include "app/MainWindow.h"
 #include "services/ResultExportService.h"
+#include "widgets/ImagePreviewWidget.h"
+
+namespace
+{
+QString imageListText(QListView* view, int row)
+{
+    return view->model()->index(row, 0).data(Qt::DisplayRole).toString();
+}
+
+QPixmap imageListThumbnail(QListView* view, int row)
+{
+    return view->model()->index(row, 0).data(Qt::UserRole + 2).value<QPixmap>();
+}
+}
 
 class TestRecognitionServer final : public QObject
 {
@@ -109,11 +122,18 @@ private slots:
 
             const QString plateText =
                 requestCount_ == 1 ? QString::fromUtf8("沪A12345") : QString::fromUtf8("粤B54321");
+            const QString boxesJson =
+                requestCount_ == 1
+                    ? QStringLiteral("[{\"x1\":120,\"y1\":180,\"x2\":420,\"y2\":280,\"confidence\":0.97}]")
+                    : QStringLiteral(
+                          "[{\"x1\":88,\"y1\":140,\"x2\":310,\"y2\":220,\"confidence\":0.95},"
+                          "{\"x1\":460,\"y1\":260,\"x2\":760,\"y2\":360,\"confidence\":0.72}]");
             const QByteArray responseBody =
                 QString("{\"image_id\":\"UnitTestImage%1\",\"plate_text\":\"%2\",\"confidence\":0.98,"
-                        "\"boxes\":[],\"elapsed_ms\":12.3}")
+                        "\"boxes\":%3,\"elapsed_ms\":12.3}")
                     .arg(requestCount_)
                     .arg(plateText)
+                    .arg(boxesJson)
                     .toUtf8();
             const QByteArray response =
                 "HTTP/1.1 200 OK\r\n"
@@ -177,7 +197,7 @@ void MainWindowTest::shouldInitializeCoreControls()
     auto* startButton = window.findChild<QPushButton*>("startButton");
     auto* stopButton = window.findChild<QPushButton*>("stopButton");
     auto* exportButton = window.findChild<QPushButton*>("exportButton");
-    auto* imageListWidget = window.findChild<QListWidget*>("imageListWidget");
+    auto* imageListView = window.findChild<QListView*>("imageListView");
     auto* menuBar = window.findChild<QMenuBar*>("mainMenuBar");
 
     QVERIFY(uploadButton != nullptr);
@@ -185,7 +205,7 @@ void MainWindowTest::shouldInitializeCoreControls()
     QVERIFY(startButton != nullptr);
     QVERIFY(stopButton != nullptr);
     QVERIFY(exportButton != nullptr);
-    QVERIFY(imageListWidget != nullptr);
+    QVERIFY(imageListView != nullptr);
     QVERIFY(menuBar != nullptr);
     QVERIFY(window.findChild<QObject*>("themeComboBox") == nullptr);
     QVERIFY(menuBar->actions().size() == 1);
@@ -196,7 +216,7 @@ void MainWindowTest::shouldInitializeCoreControls()
     QVERIFY(!window.hasLoadedImage());
     QVERIFY(!startButton->isEnabled());
     QVERIFY(!stopButton->isEnabled());
-    QCOMPARE(imageListWidget->viewMode(), QListView::IconMode);
+    QCOMPARE(imageListView->viewMode(), QListView::IconMode);
 }
 
 void MainWindowTest::shouldRejectInvalidImportedImage()
@@ -239,16 +259,22 @@ void MainWindowTest::shouldTriggerBackendRecognitionAfterLoadingImage()
     QVERIFY2(errorMessage.isEmpty(), qPrintable(errorMessage));
 
     auto* startButton = window.findChild<QPushButton*>("startButton");
+    auto* imagePreview = window.findChild<ImagePreviewWidget*>("imagePreviewWidget");
+    auto* imageListView = window.findChild<QListView*>("imageListView");
     QVERIFY(startButton != nullptr);
+    QVERIFY(imagePreview != nullptr);
+    QVERIFY(imageListView != nullptr);
     QVERIFY(startButton->isEnabled());
+    QVERIFY(imageListText(imageListView, 0).startsWith("img_"));
 
     QTest::mouseClick(startButton, Qt::LeftButton);
 
     QTRY_VERIFY(server.requestReceived());
     QTRY_COMPARE(window.resultCount(), 1);
     QCOMPARE(server.requestPath(), QString("/api/v1/recognize"));
-    QVERIFY(server.rawRequest().contains("form-data; name=\"file\"; filename=\"image-"));
+    QVERIFY(server.rawRequest().contains("form-data; name=\"file\"; filename=\"img_"));
     QCOMPARE(window.latestPlateText(), QString::fromUtf8("沪A12345"));
+    QCOMPARE(imagePreview->overlayCount(), 1);
 
     auto* backendStatusLabel = window.findChild<QLabel*>("backendStatusValueLabel");
     QVERIFY(backendStatusLabel != nullptr);
@@ -284,16 +310,18 @@ void MainWindowTest::shouldTriggerBackendRecognitionForConfiguredDirectory()
     QVERIFY2(errorMessage.isEmpty(), qPrintable(errorMessage));
 
     auto* startButton = window.findChild<QPushButton*>("startButton");
-    auto* imageListWidget = window.findChild<QListWidget*>("imageListWidget");
+    auto* imageListView = window.findChild<QListView*>("imageListView");
     auto* statusLabel = window.findChild<QLabel*>("statusValueLabel");
     auto* progressLabel = window.findChild<QLabel*>("batchProgressValueLabel");
     QVERIFY(startButton != nullptr);
-    QVERIFY(imageListWidget != nullptr);
+    QVERIFY(imageListView != nullptr);
     QVERIFY(statusLabel != nullptr);
     QVERIFY(progressLabel != nullptr);
     QVERIFY(startButton->isEnabled());
-    QCOMPARE(imageListWidget->count(), 2);
-    QVERIFY(!imageListWidget->item(0)->icon().isNull());
+    QCOMPARE(imageListView->model()->rowCount(), 2);
+    QVERIFY(imageListText(imageListView, 0).startsWith("img_"));
+    QVERIFY(imageListText(imageListView, 1).startsWith("img_"));
+    QTRY_VERIFY(!imageListThumbnail(imageListView, 0).isNull());
 
     QTest::mouseClick(startButton, Qt::LeftButton);
 
@@ -327,20 +355,25 @@ void MainWindowTest::shouldSwitchDisplayedResultWhenSelectingDifferentDirectoryI
     QVERIFY2(errorMessage.isEmpty(), qPrintable(errorMessage));
 
     auto* startButton = window.findChild<QPushButton*>("startButton");
-    auto* imageListWidget = window.findChild<QListWidget*>("imageListWidget");
+    auto* imageListView = window.findChild<QListView*>("imageListView");
+    auto* imagePreview = window.findChild<ImagePreviewWidget*>("imagePreviewWidget");
     QVERIFY(startButton != nullptr);
-    QVERIFY(imageListWidget != nullptr);
+    QVERIFY(imageListView != nullptr);
+    QVERIFY(imagePreview != nullptr);
 
     QTest::mouseClick(startButton, Qt::LeftButton);
     QTRY_COMPARE(window.resultCount(), 2);
+    QCOMPARE(imagePreview->overlayCount(), 2);
 
-    imageListWidget->setCurrentRow(0);
+    imageListView->setCurrentIndex(imageListView->model()->index(0, 0));
     QTRY_COMPARE(window.latestPlateText(), QString::fromUtf8("沪A12345"));
-    QVERIFY(!imageListWidget->item(0)->icon().isNull());
+    QTRY_VERIFY(!imageListThumbnail(imageListView, 0).isNull());
+    QCOMPARE(imagePreview->overlayCount(), 1);
 
-    imageListWidget->setCurrentRow(1);
+    imageListView->setCurrentIndex(imageListView->model()->index(1, 0));
     QTRY_COMPARE(window.latestPlateText(), QString::fromUtf8("粤B54321"));
-    QVERIFY(!imageListWidget->item(1)->icon().isNull());
+    QTRY_VERIFY(!imageListThumbnail(imageListView, 1).isNull());
+    QCOMPARE(imagePreview->overlayCount(), 2);
 }
 
 void MainWindowTest::shouldStopDetectionForConfiguredDirectory()

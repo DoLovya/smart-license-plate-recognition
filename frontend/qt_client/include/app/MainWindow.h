@@ -2,7 +2,6 @@
 
 #include <QImage>
 #include <QHash>
-#include <QIcon>
 #include <QResizeEvent>
 #include <QStringList>
 #include <QUrl>
@@ -20,8 +19,8 @@ QT_END_NAMESPACE
 
 class AlgorithmServiceClient;
 class QActionGroup;
+class ImageGalleryWidget;
 class ImagePreviewWidget;
-class QListWidgetItem;
 class ResultExportService;
 
 class MainWindow final : public QWidget
@@ -72,8 +71,7 @@ private:
     void updateImageListItem(const QString& filePath);
     void syncResultPanelForCurrentImage();
     QString ensureImageId(const QString& filePath);
-    QIcon buildThumbnailIcon(const QString& filePath);
-    QString buildImageListText(const QString& filePath) const;
+    QString buildImageListText(const QString& filePath);
     bool previewFirstDirectoryImage(QString* errorMessage);
     void startSingleImageDetection();
     void startDirectoryDetection();
@@ -93,19 +91,19 @@ private slots:
     void handleRecognitionReady(const RecognitionRecord& record);
     void handleServiceStateChanged(const QString& statusText);
     void handleDetectionFailed(const QString& errorMessage);
-    void handleImageListSelectionChanged(QListWidgetItem* current, QListWidgetItem* previous);
+    void handleImageListSelectionChanged(const QString& filePath);
     void handleThemeActionTriggered();
 
 private:
     Ui::MainWindow* ui_;
     QActionGroup* themeActionGroup_ = nullptr;
+    ImageGalleryWidget* imageGalleryWidget_ = nullptr;
     ImagePreviewWidget* imagePreview_;
     AlgorithmServiceClient* serviceClient_;
     ResultExportService* exportService_;
     QVector<RecognitionRecord> recognitionHistory_;
     QHash<QString, RecognitionRecord> recognitionRecordsByPath_;
     QHash<QString, QString> imageIdsByPath_;
-    QHash<QString, QIcon> thumbnailIconsByPath_;
     QString importedImagePath_;
     QString importedImageId_;
     QString configuredDirectoryPath_;

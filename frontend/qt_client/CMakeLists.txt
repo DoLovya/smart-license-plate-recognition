@@ -36,7 +36,9 @@ set(QT_CLIENT_SERVICE_SOURCES
 
 set(QT_CLIENT_WIDGET_SOURCES
     src/widgets/ImagePreviewWidget.cpp
+    src/widgets/ImageGalleryWidget.cpp
     include/widgets/ImagePreviewWidget.h
+    include/widgets/ImageGalleryWidget.h
 )
 
 set(QT_CLIENT_SHARED_HEADERS
